@@ -18,7 +18,7 @@
  */
 package org.apache.polaris.tools.sync.polaris.options;
 
-import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.polaris.tools.sync.polaris.PolarisService;
@@ -28,11 +28,11 @@ public abstract class BasePolarisOptions {
 
   protected static final String BASE_URL = "base-url";
 
-  protected static final String AUTHENTICATION_PROPERTIES = "authentication-properties";
+  protected static final String AUTHENTICATION_PROPERTIES = "service-admin-property";
 
   protected String baseUrl;
 
-  protected Map<String, String> authenticationProperties;
+  protected Map<String, String> authenticationProperties = new HashMap<>();
 
   public abstract String getServiceName();
 
@@ -41,6 +41,6 @@ public abstract class BasePolarisOptions {
   public abstract void setAuthenticationProperties(Map<String, String> authenticationProperties);
 
   public PolarisService buildService() {
-    return PolarisServiceFactory.newPolarisService(baseUrl, authenticationProperties);
+    return PolarisServiceFactory.newPolarisService(getServiceName(), baseUrl, authenticationProperties);
   }
 }

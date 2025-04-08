@@ -332,7 +332,7 @@ public class PolarisService {
     currentCatalogProperties.putIfAbsent("scope", "PRINCIPAL_ROLE:ALL");
 
     return CatalogUtil.loadCatalog(
-        PolarisCatalog.class.getName(), "SOURCE_CATALOG_REST", currentCatalogProperties, null);
+        PolarisCatalog.class.getName(), "POLARIS_CATALOG_" + catalogName, currentCatalogProperties, null);
   }
 
   /**
