@@ -19,6 +19,8 @@
 package org.apache.polaris.tools.sync.polaris.options;
 
 import java.io.IOException;
+import java.util.Map;
+
 import org.apache.polaris.tools.sync.polaris.PolarisService;
 import org.apache.polaris.tools.sync.polaris.PolarisServiceFactory;
 
@@ -26,47 +28,19 @@ public abstract class BasePolarisOptions {
 
   protected static final String BASE_URL = "base-url";
 
-  protected static final String CLIENT_ID = "client-id";
-
-  protected static final String CLIENT_SECRET = "client-secret";
-
-  protected static final String SCOPE = "scope";
-
-  protected static final String OAUTH2_SERVER_URI = "oauth2-server-uri";
-
-  protected static final String ACCESS_TOKEN = "access-token";
+  protected static final String AUTHENTICATION_PROPERTIES = "authentication-properties";
 
   protected String baseUrl;
 
-  protected String oauth2ServerUri;
-
-  protected String clientId;
-
-  protected String clientSecret;
-
-  protected String scope;
-
-  protected String accessToken;
+  protected Map<String, String> authenticationProperties;
 
   public abstract String getServiceName();
 
   public abstract void setBaseUrl(String baseUrl);
 
-  public abstract void setOauth2ServerUri(String oauth2ServerUri);
+  public abstract void setAuthenticationProperties(Map<String, String> authenticationProperties);
 
-  public abstract void setClientId(String clientId);
-
-  public abstract void setClientSecret(String clientSecret);
-
-  public abstract void setScope(String scope);
-
-  public abstract void setAccessToken(String accessToken);
-
-  public PolarisService buildService() throws IOException {
-    if (accessToken != null) {
-      return PolarisServiceFactory.newPolarisService(baseUrl, accessToken);
-    }
-    return PolarisServiceFactory.newPolarisService(
-        baseUrl, oauth2ServerUri, clientId, clientSecret, scope);
+  public PolarisService buildService() {
+    return PolarisServiceFactory.newPolarisService(baseUrl, authenticationProperties);
   }
 }
