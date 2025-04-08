@@ -24,6 +24,7 @@ import java.util.Map;
 import org.apache.http.HttpHeaders;
 import org.apache.polaris.management.ApiClient;
 import org.apache.polaris.management.client.PolarisManagementDefaultApi;
+import org.apache.polaris.tools.sync.polaris.auth.AuthenticationProvider;
 import org.apache.polaris.tools.sync.polaris.http.OAuth2Util;
 
 /** Used to initialize a {@link PolarisService}. */
@@ -52,33 +53,15 @@ public class PolarisServiceFactory {
     }
   }
 
-  public static PolarisService newPolarisService(
-      String baseUrl, String oauth2ServerUri, String clientId, String clientSecret, String scope)
-      throws IOException {
-    validatePolarisInstanceProperties(
-        baseUrl, null /* accessToken */, oauth2ServerUri, clientId, clientSecret, scope);
-
-    String accessToken = OAuth2Util.fetchToken(oauth2ServerUri, clientId, clientSecret, scope);
-
-    return newPolarisService(baseUrl, accessToken);
-  }
-
-  public static PolarisService newPolarisService(String baseUrl, String accessToken) {
-    validatePolarisInstanceProperties(
-        baseUrl,
-        accessToken,
-        null, /* oauth2ServerUri */
-        null, /* clientId */
-        null, /* clientSecret */
-        null /* scope */);
-
+  public static PolarisService newPolarisService(String baseUrl, Map<String, String> authenticationProperties) {
     ApiClient client = new ApiClient();
     client.updateBaseUri(baseUrl + "/api/management/v1");
 
-    // TODO: Add token refresh
+    AuthenticationProvider authProvider = new AuthenticationProvider(authenticationProperties);
+
     client.setRequestInterceptor(
         requestBuilder -> {
-          requestBuilder.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
+          authProvider.getAuthHeaders().forEach(requestBuilder::header);
         });
 
     Map<String, String> catalogProperties = new HashMap<>();
