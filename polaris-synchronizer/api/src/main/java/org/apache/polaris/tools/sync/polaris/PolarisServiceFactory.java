@@ -56,7 +56,7 @@ public class PolarisServiceFactory {
       String baseUrl, String oauth2ServerUri, String clientId, String clientSecret, String scope)
       throws IOException {
     validatePolarisInstanceProperties(
-        baseUrl, null, oauth2ServerUri, clientId, clientSecret, scope);
+        baseUrl, null /* accessToken */, oauth2ServerUri, clientId, clientSecret, scope);
 
     String accessToken = OAuth2Util.fetchToken(oauth2ServerUri, clientId, clientSecret, scope);
 
@@ -64,7 +64,14 @@ public class PolarisServiceFactory {
   }
 
   public static PolarisService newPolarisService(String baseUrl, String accessToken) {
-    validatePolarisInstanceProperties(baseUrl, accessToken, null, null, null, null);
+    validatePolarisInstanceProperties(
+            baseUrl,
+            accessToken,
+            null, /* oauth2ServerUri */
+            null, /* clientId */
+            null, /* clientSecret */
+            null /* scope */
+    );
 
     ApiClient client = new ApiClient();
     client.updateBaseUri(baseUrl + "/api/management/v1");

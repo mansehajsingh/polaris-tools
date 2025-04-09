@@ -756,7 +756,7 @@ public class PolarisSynchronizer {
   }
 
   /**
-   * Setup an omnipotent principal for the provided catalog on the source Polaris instance.
+   * Setup an omnipotent principal for the provided catalog on the target Polaris instance.
    *
    * @param catalogName
    */

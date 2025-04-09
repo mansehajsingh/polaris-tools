@@ -25,7 +25,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.LocationProvider;
 
 /**
- * Wrapper table operationw class that just allows fetching a provided table metadata. Used to build
+ * Wrapper table operations class that just allows fetching a provided table metadata. Used to build
  * a {@link org.apache.iceberg.BaseTable} without having to expose a full-fledged operations class.
  */
 public class MetadataWrapperTableOperations implements TableOperations {
