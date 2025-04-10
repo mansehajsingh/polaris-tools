@@ -65,13 +65,12 @@ public class PolarisServiceFactory {
 
   public static PolarisService newPolarisService(String baseUrl, String accessToken) {
     validatePolarisInstanceProperties(
-            baseUrl,
-            accessToken,
-            null, /* oauth2ServerUri */
-            null, /* clientId */
-            null, /* clientSecret */
-            null /* scope */
-    );
+        baseUrl,
+        accessToken,
+        null, /* oauth2ServerUri */
+        null, /* clientId */
+        null, /* clientSecret */
+        null /* scope */);
 
     ApiClient client = new ApiClient();
     client.updateBaseUri(baseUrl + "/api/management/v1");
