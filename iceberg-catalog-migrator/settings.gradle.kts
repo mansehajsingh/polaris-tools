@@ -35,7 +35,7 @@ gradle.beforeProject {
 
 fun catalogMigratorProject(name: String) {
   include("iceberg-catalog-migrator-$name")
-  project(":iceberg-catalog-migrator-$name").projectDir = file("iceberg-catalog-migrator/$name")
+  project(":iceberg-catalog-migrator-$name").projectDir = file(name)
 }
 
 catalogMigratorProject("api")
@@ -44,6 +44,4 @@ catalogMigratorProject("api-test")
 
 catalogMigratorProject("cli")
 
-include("bom")
-
-project(":bom").projectDir = file("bom")
+catalogMigratorProject("bom")
