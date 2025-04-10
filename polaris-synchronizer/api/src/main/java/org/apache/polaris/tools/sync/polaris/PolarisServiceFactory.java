@@ -20,7 +20,6 @@ package org.apache.polaris.tools.sync.polaris;
 
 import java.util.HashMap;
 import java.util.Map;
-
 import org.apache.iceberg.rest.ResourcePaths;
 import org.apache.polaris.management.ApiClient;
 import org.apache.polaris.management.client.PolarisManagementDefaultApi;
@@ -30,23 +29,22 @@ import org.apache.polaris.tools.sync.polaris.auth.AuthenticationProvider;
 public class PolarisServiceFactory {
 
   public static PolarisService newPolarisService(
-          String serviceName,
-          String baseUrl,
-          Map<String, String> authenticationProperties
-  ) {
+      String serviceName, String baseUrl, Map<String, String> authenticationProperties) {
     ApiClient client = new ApiClient();
     client.updateBaseUri(baseUrl + "/api/management/v1");
 
-    AuthenticationProvider authProvider = new AuthenticationProvider(serviceName, authenticationProperties);
+    AuthenticationProvider authProvider =
+        new AuthenticationProvider(serviceName, authenticationProperties);
 
     // tag each request with a regularly refreshed token
     client.setRequestInterceptor(
-            requestBuilder -> authProvider.getAuthHeaders().forEach(requestBuilder::header));
+        requestBuilder -> authProvider.getAuthHeaders().forEach(requestBuilder::header));
 
     Map<String, String> catalogProperties = new HashMap<>();
     catalogProperties.putIfAbsent("uri", baseUrl + "/api/catalog");
-    catalogProperties.putIfAbsent("oauth2-server-uri", String.format(
-            "%s/%s/%s", baseUrl, "api/catalog", ResourcePaths.tokens()));
+    catalogProperties.putIfAbsent(
+        "oauth2-server-uri",
+        String.format("%s/%s/%s", baseUrl, "api/catalog", ResourcePaths.tokens()));
 
     PolarisManagementDefaultApi polarisClient = new PolarisManagementDefaultApi(client);
     return new PolarisService(polarisClient, catalogProperties);

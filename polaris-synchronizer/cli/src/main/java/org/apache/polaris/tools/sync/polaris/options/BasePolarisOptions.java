@@ -20,7 +20,6 @@ package org.apache.polaris.tools.sync.polaris.options;
 
 import java.util.HashMap;
 import java.util.Map;
-
 import org.apache.polaris.tools.sync.polaris.PolarisService;
 import org.apache.polaris.tools.sync.polaris.PolarisServiceFactory;
 
@@ -41,6 +40,7 @@ public abstract class BasePolarisOptions {
   public abstract void setAuthenticationProperties(Map<String, String> authenticationProperties);
 
   public PolarisService buildService() {
-    return PolarisServiceFactory.newPolarisService(getServiceName(), baseUrl, authenticationProperties);
+    return PolarisServiceFactory.newPolarisService(
+        getServiceName(), baseUrl, authenticationProperties);
   }
 }

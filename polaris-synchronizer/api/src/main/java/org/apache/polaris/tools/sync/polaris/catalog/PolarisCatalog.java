@@ -20,7 +20,6 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.Closeable;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -75,7 +74,8 @@ public class PolarisCatalog extends RESTCatalog
     }
 
     if (authenticationProvider == null || httpClient == null || this.objectMapper == null) {
-      this.authenticationProvider = new AuthenticationProvider(name + "-polaris-rest-catalog", this.properties);
+      this.authenticationProvider =
+          new AuthenticationProvider(name + "-polaris-rest-catalog", this.properties);
 
       this.httpClient = HttpClient.newBuilder().build();
       this.objectMapper = new ObjectMapper();
@@ -104,10 +104,7 @@ public class PolarisCatalog extends RESTCatalog
     String tablePath =
         String.format("%s/%s", this.properties.get("uri"), resourcePaths.table(ident));
 
-    HttpRequest.Builder requestBuilder =
-        HttpRequest.newBuilder()
-            .uri(URI.create(tablePath))
-            .GET();
+    HttpRequest.Builder requestBuilder = HttpRequest.newBuilder().uri(URI.create(tablePath)).GET();
 
     authenticationProvider.getAuthHeaders().forEach(requestBuilder::header);
 

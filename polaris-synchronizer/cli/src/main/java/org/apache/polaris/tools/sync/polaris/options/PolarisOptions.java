@@ -18,9 +18,8 @@
  */
 package org.apache.polaris.tools.sync.polaris.options;
 
-import picocli.CommandLine;
-
 import java.util.Map;
+import picocli.CommandLine;
 
 public class PolarisOptions extends BasePolarisOptions {
 
@@ -39,9 +38,10 @@ public class PolarisOptions extends BasePolarisOptions {
   }
 
   @CommandLine.Option(
-          names = "--polaris-" + AUTHENTICATION_PROPERTIES,
-          required = true,
-          description = "The authentication configuration for the service admin on the Polaris instance.")
+      names = "--polaris-" + AUTHENTICATION_PROPERTIES,
+      required = true,
+      description =
+          "The authentication configuration for the service admin on the Polaris instance.")
   @Override
   public void setAuthenticationProperties(Map<String, String> authenticationProperties) {
     this.authenticationProperties = authenticationProperties;
