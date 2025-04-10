@@ -20,7 +20,6 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.Closeable;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,7 +39,7 @@ import org.apache.iceberg.rest.RESTCatalog;
 import org.apache.iceberg.rest.ResourcePaths;
 import org.apache.iceberg.rest.responses.LoadTableResponse;
 import org.apache.iceberg.rest.responses.LoadTableResponseParser;
-import org.apache.polaris.tools.sync.polaris.http.OAuth2Util;
+import org.apache.polaris.tools.sync.polaris.auth.AuthenticationProvider;
 
 /**
  * Overrides loadTable default implementation to issue a custom loadTable request to the Polaris
@@ -51,11 +50,9 @@ import org.apache.polaris.tools.sync.polaris.http.OAuth2Util;
 public class PolarisCatalog extends RESTCatalog
     implements Catalog, ViewCatalog, SupportsNamespaces, Configurable<Object>, Closeable {
 
-  private String name = null;
-
   private Map<String, String> properties = null;
 
-  private String accessToken = null;
+  private AuthenticationProvider authenticationProvider = null;
 
   private HttpClient httpClient = null;
 
@@ -69,7 +66,6 @@ public class PolarisCatalog extends RESTCatalog
 
   @Override
   public void initialize(String name, Map<String, String> props) {
-    this.name = name;
     this.properties = props;
 
     if (resourcePaths == null) {
@@ -77,21 +73,9 @@ public class PolarisCatalog extends RESTCatalog
       resourcePaths = ResourcePaths.forCatalogProperties(this.properties);
     }
 
-    if (accessToken == null || httpClient == null || this.objectMapper == null) {
-      String oauth2ServerUri = props.get("uri") + "/v1/oauth/tokens";
-      String credential = props.get("credential");
-
-      String clientId = credential.split(":")[0];
-      String clientSecret = credential.split(":")[1];
-
-      String scope = props.get("scope");
-
-      // TODO: Add token refresh
-      try {
-        this.accessToken = OAuth2Util.fetchToken(oauth2ServerUri, clientId, clientSecret, scope);
-      } catch (IOException e) {
-        throw new RuntimeException(e);
-      }
+    if (authenticationProvider == null || httpClient == null || this.objectMapper == null) {
+      this.authenticationProvider =
+          new AuthenticationProvider(name + "-polaris-rest-catalog", this.properties);
 
       this.httpClient = HttpClient.newBuilder().build();
       this.objectMapper = new ObjectMapper();
@@ -120,11 +104,9 @@ public class PolarisCatalog extends RESTCatalog
     String tablePath =
         String.format("%s/%s", this.properties.get("uri"), resourcePaths.table(ident));
 
-    HttpRequest.Builder requestBuilder =
-        HttpRequest.newBuilder()
-            .uri(URI.create(tablePath))
-            .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
-            .GET();
+    HttpRequest.Builder requestBuilder = HttpRequest.newBuilder().uri(URI.create(tablePath)).GET();
+
+    authenticationProvider.getAuthHeaders().forEach(requestBuilder::header);
 
     // specify last known etag in if-none-match header
     if (etag != null) {
