@@ -28,6 +28,7 @@ import org.apache.polaris.core.admin.model.ExternalCatalog;
 import org.apache.polaris.core.admin.model.GcpStorageConfigInfo;
 import org.apache.polaris.core.admin.model.GrantResource;
 import org.apache.polaris.core.admin.model.PolarisCatalog;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.StorageConfigInfo;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
@@ -38,6 +39,54 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class ModificationAwarePlannerTest {
+
+  private static final Principal principal = new Principal().name("principal");
+
+  private static final Principal modifiedPrincipal =
+          new Principal().name("principal").putPropertiesItem("newproperty", "newvalue");
+
+  private static final Principal principalWithClientId =
+          new Principal()
+                  .name("principal")
+                  .clientId("clientId");
+
+  private static final Principal principalWithResetClientId =
+          new Principal()
+                  .name("principal")
+                  .clientId("clientIdNew");
+
+  @Test
+  public void testPrincipalNotModified() {
+    SynchronizationPlanner modificationPlanner =
+            new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<Principal> plan =
+            modificationPlanner.planPrincipalSync(List.of(principal), List.of(principal));
+
+    Assertions.assertTrue(plan.entitiesNotModified().contains(principal));
+  }
+
+  @Test
+  public void testPrincipalModified() {
+    SynchronizationPlanner modificationPlanner =
+            new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<Principal> plan =
+            modificationPlanner.planPrincipalSync(List.of(principal), List.of(modifiedPrincipal));
+
+    Assertions.assertFalse(plan.entitiesNotModified().contains(principal));
+  }
+
+  @Test
+  public void testPrincipalNotModifiedWithResetClientId() {
+    SynchronizationPlanner modificationPlanner =
+            new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<Principal> plan =
+            modificationPlanner.planPrincipalSync(List.of(principalWithClientId), List.of(principalWithResetClientId));
+
+    Assertions.assertTrue(plan.entitiesNotModified().contains(principalWithClientId));
+  }
 
   private static final PrincipalRole principalRole = new PrincipalRole().name("principal-role");
 

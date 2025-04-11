@@ -25,6 +25,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
@@ -57,6 +58,35 @@ public class SourceParitySynchronizationPlannerTest {
     Assertions.assertFalse(plan.entitiesToCreate().contains(CATALOG_3));
     Assertions.assertFalse(plan.entitiesToOverwrite().contains(CATALOG_3));
     Assertions.assertTrue(plan.entitiesToRemove().contains(CATALOG_3));
+  }
+
+  private static final Principal PRINCIPAL_1 =
+          new Principal().name("principal-1");
+
+  private static final Principal PRINCIPAL_2 =
+          new Principal().name("principal-2");
+
+  private static final Principal PRINCIPAL_3 =
+          new Principal().name("principal-3");
+
+  @Test
+  public void testCreatesNewPrincipalOverwritesOldPrincipalRemovesDroppedPrincipal() {
+    SourceParitySynchronizationPlanner planner = new SourceParitySynchronizationPlanner();
+
+    SynchronizationPlan<Principal> plan =
+            planner.planPrincipalSync(List.of(PRINCIPAL_1, PRINCIPAL_2), List.of(PRINCIPAL_2, PRINCIPAL_3));
+
+    Assertions.assertTrue(plan.entitiesToCreate().contains(PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(PRINCIPAL_1));
+
+    Assertions.assertFalse(plan.entitiesToCreate().contains(PRINCIPAL_2));
+    Assertions.assertTrue(plan.entitiesToOverwrite().contains(PRINCIPAL_2));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(PRINCIPAL_2));
+
+    Assertions.assertFalse(plan.entitiesToCreate().contains(PRINCIPAL_3));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(PRINCIPAL_3));
+    Assertions.assertTrue(plan.entitiesToRemove().contains(PRINCIPAL_3));
   }
 
   private static final PrincipalRole PRINCIPAL_ROLE_1 =

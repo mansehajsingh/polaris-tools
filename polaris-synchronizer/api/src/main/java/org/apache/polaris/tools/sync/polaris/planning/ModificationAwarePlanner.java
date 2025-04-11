@@ -82,9 +82,8 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
           LAST_UPDATE_TIMESTAMP,
           ENTITY_VERSION,
 
-          // client id and client secret will never be the same across the instances, ignore them
-          CLIENT_ID,
-          CLIENT_SECRET
+          // client id will never be the same across the instances, ignore it
+          CLIENT_ID
   );
 
   private final SynchronizationPlanner delegate;
@@ -172,7 +171,7 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
         Principal targetPrincipal = targetPrincipalsByName.get(sourcePrincipal.getName());
 
         if (areSame(sourcePrincipal, targetPrincipal, PRINCIPAL_KEYS_TO_IGNORE)) {
-          notModifiedPrincipals.add(targetPrincipal);
+          notModifiedPrincipals.add(sourcePrincipal);
           sourcePrincipalsByName.remove(sourcePrincipal.getName());
           targetPrincipalsByName.remove(targetPrincipal.getName());
         }

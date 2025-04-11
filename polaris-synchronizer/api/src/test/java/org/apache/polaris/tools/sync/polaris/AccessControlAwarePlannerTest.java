@@ -20,6 +20,7 @@ package org.apache.polaris.tools.sync.polaris;
 
 import java.util.List;
 import org.apache.polaris.core.admin.model.CatalogRole;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlConstants;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
@@ -30,6 +31,44 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class AccessControlAwarePlannerTest {
+
+  private static final Principal omnipotentPrincipalSource =
+          new Principal()
+                  .name("omnipotent-principal-XXXXX")
+                  .putPropertiesItem(AccessControlConstants.OMNIPOTENCE_PROPERTY, "");
+
+  private static final Principal omnipotentPrincipalTarget =
+          new Principal()
+                  .name("omnipotent-principal-YYYYY")
+                  .putPropertiesItem(AccessControlConstants.OMNIPOTENCE_PROPERTY, "");
+
+  @Test
+  public void filtersOmnipotentPrincipal() {
+    SynchronizationPlanner accessControlAwarePlanner
+            = new AccessControlAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<Principal> plan = accessControlAwarePlanner
+            .planPrincipalSync(List.of(omnipotentPrincipalSource), List.of(omnipotentPrincipalTarget));
+
+    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalSource));
+    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalTarget));
+  }
+
+  private static final Principal rootPrincipalSource = new Principal().name("root");
+
+  private static final Principal rootPrincipalTarget = new Principal().name("root");
+
+  @Test
+  public void filtersRootPrincipal() {
+    SynchronizationPlanner accessControlAwarePlanner
+            = new AccessControlAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<Principal> plan = accessControlAwarePlanner
+            .planPrincipalSync(List.of(rootPrincipalSource), List.of(rootPrincipalTarget));
+
+    Assertions.assertTrue(plan.entitiesToSkip().contains(rootPrincipalSource));
+    Assertions.assertTrue(plan.entitiesToSkip().contains(rootPrincipalTarget));
+  }
 
   private static final PrincipalRole omnipotentPrincipalRoleSource =
       new PrincipalRole()
