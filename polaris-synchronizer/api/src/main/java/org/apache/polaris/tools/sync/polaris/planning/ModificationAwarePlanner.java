@@ -32,6 +32,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
@@ -71,6 +72,20 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
 
           // GCP
           "storageConfigInfo.gcsServiceAccount");
+
+  private static final String CLIENT_ID = "clientId";
+
+  private static final String CLIENT_SECRET = "clientSecret";
+
+  private static final List<String> PRINCIPAL_KEYS_TO_IGNORE = List.of(
+          CREATE_TIMESTAMP,
+          LAST_UPDATE_TIMESTAMP,
+          ENTITY_VERSION,
+
+          // client id and client secret will never be the same across the instances, ignore them
+          CLIENT_ID,
+          CLIENT_SECRET
+  );
 
   private final SynchronizationPlanner delegate;
 
@@ -140,6 +155,40 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
 
   private boolean areSame(Object o1, Object o2) {
     return areSame(o1, o2, DEFAULT_KEYS_TO_IGNORE);
+  }
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    Map<String, Principal> sourcePrincipalsByName = new HashMap<>();
+    Map<String, Principal> targetPrincipalsByName = new HashMap<>();
+
+    List<Principal> notModifiedPrincipals = new ArrayList<>();
+
+    principalsOnSource.forEach(principal -> sourcePrincipalsByName.put(principal.getName(), principal));
+    principalsOnTarget.forEach(principal -> targetPrincipalsByName.put(principal.getName(), principal));
+
+    for (Principal sourcePrincipal : principalsOnSource) {
+      if (targetPrincipalsByName.containsKey(sourcePrincipal.getName())) {
+        Principal targetPrincipal = targetPrincipalsByName.get(sourcePrincipal.getName());
+
+        if (areSame(sourcePrincipal, targetPrincipal, PRINCIPAL_KEYS_TO_IGNORE)) {
+          notModifiedPrincipals.add(targetPrincipal);
+          sourcePrincipalsByName.remove(sourcePrincipal.getName());
+          targetPrincipalsByName.remove(targetPrincipal.getName());
+        }
+      }
+    }
+
+    SynchronizationPlan<Principal> delegatedPlan = delegate.planPrincipalSync(
+            sourcePrincipalsByName.values().stream().toList(),
+            targetPrincipalsByName.values().stream().toList()
+    );
+
+    for (Principal principal : notModifiedPrincipals) {
+      delegatedPlan.skipEntityNotModified(principal);
+    }
+
+    return delegatedPlan;
   }
 
   @Override

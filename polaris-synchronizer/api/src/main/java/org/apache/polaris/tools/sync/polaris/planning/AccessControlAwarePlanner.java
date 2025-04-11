@@ -21,6 +21,7 @@ package org.apache.polaris.tools.sync.polaris.planning;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.polaris.core.admin.model.CatalogRole;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlConstants;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
@@ -35,6 +36,53 @@ public class AccessControlAwarePlanner extends DelegatedPlanner implements Synch
 
   public AccessControlAwarePlanner(SynchronizationPlanner delegate) {
     super(delegate);
+  }
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    List<Principal> skippedPrincipals = new ArrayList<>();
+    List<Principal> filteredPrincipalsSource = new ArrayList<>();
+    List<Principal> filteredPrincipalsTarget = new ArrayList<>();
+
+    for (Principal principal : principalsOnSource) {
+      if (principal.getProperties() != null
+              && principal.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
+        skippedPrincipals.add(principal);
+        continue;
+      }
+
+      if (principal.getName().equals("root")) {
+        skippedPrincipals.add(principal);
+        continue;
+      }
+
+      filteredPrincipalsSource.add(principal);
+    }
+
+    for (Principal principal : principalsOnTarget) {
+      if (principal.getProperties() != null
+              && principal.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
+        skippedPrincipals.add(principal);
+        continue;
+      }
+
+      if (principal.getName().equals("root")) {
+        skippedPrincipals.add(principal);
+        continue;
+      }
+
+      filteredPrincipalsTarget.add(principal);
+    }
+
+    SynchronizationPlan<Principal> delegatedPlan =
+            delegate.planPrincipalSync(filteredPrincipalsSource, filteredPrincipalsTarget);
+
+    for (Principal principal : skippedPrincipals) {
+      delegatedPlan.skipEntity(principal);
+    }
+
+    return delegatedPlan;
   }
 
   @Override

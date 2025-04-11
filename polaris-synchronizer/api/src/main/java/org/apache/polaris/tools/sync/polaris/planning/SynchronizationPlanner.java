@@ -25,6 +25,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
@@ -33,6 +34,9 @@ import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
  * principal roles exist on the source and target.
  */
 public interface SynchronizationPlanner {
+
+  SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget);
 
   SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget);

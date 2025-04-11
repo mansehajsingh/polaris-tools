@@ -26,6 +26,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
@@ -35,6 +36,34 @@ import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
  * and target, and removing entities that exist only on the target.
  */
 public class SourceParitySynchronizationPlanner implements SynchronizationPlanner {
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    Set<String> sourcePrincipalNames = principalsOnSource.stream().map(Principal::getName).collect(Collectors.toSet());
+    Set<String> targetPrincipalNames = principalsOnTarget.stream().map(Principal::getName).collect(Collectors.toSet());
+
+    SynchronizationPlan<Principal> plan = new SynchronizationPlan<>();
+
+    for (Principal principal : principalsOnSource) {
+      if (targetPrincipalNames.contains(principal.getName())) {
+        // overwrite the entity on the target if it exists on the source
+        plan.overwriteEntity(principal);
+      } else {
+        // create the entity on the target if not exists
+        plan.createEntity(principal);
+      }
+    }
+
+    for (Principal principal : principalsOnTarget) {
+      if (!sourcePrincipalNames.contains(principal.getName())) {
+        // remove the entity from the target if it doesn't exist on the source
+        plan.removeEntity(principal);
+      }
+    }
+
+    return plan;
+  }
 
   @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(

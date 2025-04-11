@@ -63,6 +63,10 @@ tasks.named("build") {
   dependsOn("shadowJar")
 }
 
+tasks.named("assemble") {
+  dependsOn("shadowJar")
+}
+
 // Optionally disable raw JAR
 tasks.named<Jar>("jar") {
   enabled = false

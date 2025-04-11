@@ -30,9 +30,11 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
+import org.apache.polaris.tools.sync.polaris.access.PrincipalCredentialCaptor;
 import org.apache.polaris.tools.sync.polaris.catalog.BaseTableWithETag;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
 import org.apache.polaris.tools.sync.polaris.catalog.NotModifiedException;
@@ -68,6 +70,8 @@ public class PolarisSynchronizer {
 
   private final AccessControlService targetAccessControlService;
 
+  private final PrincipalCredentialCaptor principalCredentialCaptor;
+
   private final ETagService etagService;
 
   public PolarisSynchronizer(
@@ -77,7 +81,8 @@ public class PolarisSynchronizer {
       PrincipalWithCredentials targetOmnipotentPrincipal,
       PolarisService source,
       PolarisService target,
-      ETagService etagService) {
+      ETagService etagService,
+      PrincipalCredentialCaptor principalCredentialCaptor) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.syncPlanner = synchronizationPlanner;
@@ -95,6 +100,7 @@ public class PolarisSynchronizer {
         targetAccessControlService.getOmnipotentPrincipalRoleForPrincipal(
             targetOmnipotentPrincipal.getPrincipal().getName());
     this.etagService = etagService;
+    this.principalCredentialCaptor = principalCredentialCaptor;
   }
 
   /**
@@ -107,6 +113,84 @@ public class PolarisSynchronizer {
     return plan.entitiesToCreate().size()
         + plan.entitiesToOverwrite().size()
         + plan.entitiesToRemove().size();
+  }
+
+  /** Sync principals from source to target. */
+  public void syncPrincipals() {
+    List<Principal> principalsSource;
+
+    try {
+      principalsSource = source.listPrincipals();
+      clientLogger.info("Listed {} principals from source.", principalsSource.size());
+    } catch (Exception e) {
+      clientLogger.info("Failed to list principals from source.", e);
+      return;
+    }
+
+    List<Principal> principalsTarget;
+
+    try {
+      principalsTarget = target.listPrincipals();
+      clientLogger.info("Listed {} principals from target.", principalsTarget.size());
+    } catch (Exception e) {
+      clientLogger.info("Failed to list principals from target.", e);
+      return;
+    }
+
+    SynchronizationPlan<Principal> principalSyncPlan =
+            syncPlanner.planPrincipalSync(principalsSource, principalsTarget);
+
+    principalSyncPlan
+            .entitiesToSkip()
+            .forEach(
+                    principal ->
+                            clientLogger.info("Skipping principal {}.", principal.getName()));
+
+    principalSyncPlan
+            .entitiesNotModified()
+            .forEach(
+                    principal ->
+                            clientLogger.info(
+                                    "No change detected for principal {}, skipping.",
+                                    principal.getName()));
+
+    int syncsCompleted = 0;
+    final int totalSyncsToComplete = totalSyncsToComplete(principalSyncPlan);
+
+    for (Principal principal : principalSyncPlan.entitiesToCreate()) {
+      try {
+        PrincipalWithCredentials createdPrincipal = target.createPrincipal(principal, false /* overwrite */);
+        principalCredentialCaptor.storePrincipal(createdPrincipal);
+        clientLogger.info("Created principal {} on target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to create principal {} on target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+      }
+    }
+
+    for (Principal principal : principalSyncPlan.entitiesToOverwrite()) {
+      try {
+        PrincipalWithCredentials overwrittenPrincipal = target.createPrincipal(principal, true /* overwrite */);
+        principalCredentialCaptor.storePrincipal(overwrittenPrincipal);
+        clientLogger.info("Overwrote principal {} on target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to overwrite principal {} on target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+      }
+    }
+
+    for (Principal principal : principalSyncPlan.entitiesToRemove()) {
+      try {
+        target.removePrincipal(principal.getName());
+        clientLogger.info("Removed principal {} on target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to remove principal {} ont target. - {}/{}",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+      }
+    }
   }
 
   /** Sync principal roles from source to target. */

@@ -23,6 +23,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Callable;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
+import org.apache.polaris.tools.sync.polaris.access.NoOpPrincipalCredentialCaptor;
+import org.apache.polaris.tools.sync.polaris.access.PrincipalCredentialCaptor;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
 import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagService;
 import org.apache.polaris.tools.sync.polaris.options.SourceOmniPotentPrincipalOptions;
@@ -76,6 +78,19 @@ public class SyncPolarisCommand implements Callable<Integer> {
       description = "The file path of the file to retrieve and store table ETags from.")
   private String etagFilePath;
 
+  @CommandLine.Option(
+          names = {"--sync-principals"},
+          description = "Enable principal synchronization. WARNING: Principal client-id and client-secret will be " +
+                  "reset on the target Polaris instance."
+  )
+  private boolean shouldSyncPrincipals;
+
+  @CommandLine.Option(
+          names = {"--target-principal-credentials-file"},
+          description = "The file path of the file to write credentials for principals created/overwritten on the " +
+                  "target to.")
+  private String targetPrincipalCredentialsFilePath;
+
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
@@ -101,6 +116,26 @@ public class SyncPolarisCommand implements Callable<Integer> {
       etagService = new NoOpETagService();
     }
 
+    PrincipalCredentialCaptor principalCredentialCaptor;
+
+    if (shouldSyncPrincipals) {
+      if (targetPrincipalCredentialsFilePath != null) {
+        consoleLog.warn("Principal creation will reset credentials on the target Polaris instance. " +
+                "Principal creation will produce a file {} with the collected Principal credentials on the target" +
+                " Polaris instance. Please ensure this file is stored securely as it contains sensitive credentials.",
+                targetPrincipalCredentialsFilePath);
+
+        File targetCredentialFile = new File(targetPrincipalCredentialsFilePath);
+        principalCredentialCaptor = new CsvPrincipalCredentialsCaptor(targetCredentialFile);
+      } else {
+        consoleLog.error("Principal synchronization requires specifying the --target-principal-credentials-file option " +
+                "to store the reset Principal credentials on the target Polaris instance.");
+        return 1;
+      }
+    } else {
+      principalCredentialCaptor = new NoOpPrincipalCredentialCaptor();
+    }
+
     Runtime.getRuntime()
         .addShutdownHook(
             new Thread(
@@ -112,6 +147,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
                       throw new RuntimeException(e);
                     }
                   }
+
+                  if (principalCredentialCaptor instanceof Closeable closablePrincipalCredentialCaptor) {
+                      try {
+                          closablePrincipalCredentialCaptor.close();
+                      } catch (IOException e) {
+                          throw new RuntimeException(e);
+                      }
+                  }
                 }));
 
     PolarisSynchronizer synchronizer =
@@ -122,8 +165,12 @@ public class SyncPolarisCommand implements Callable<Integer> {
             targetOmniPotentPrincipal,
             source,
             target,
-            etagService);
+            etagService,
+            principalCredentialCaptor);
 
+    if (shouldSyncPrincipals) {
+      synchronizer.syncPrincipals();
+    }
     synchronizer.syncPrincipalRoles();
     synchronizer.syncCatalogs();
 

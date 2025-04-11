@@ -25,10 +25,17 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
 public class NoOpSyncPlanner implements SynchronizationPlanner {
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    return new SynchronizationPlan<>();
+  }
 
   @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
