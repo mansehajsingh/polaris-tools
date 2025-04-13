@@ -46,12 +46,14 @@ public class AccessControlAwarePlanner extends DelegatedPlanner implements Synch
     List<Principal> filteredPrincipalsTarget = new ArrayList<>();
 
     for (Principal principal : principalsOnSource) {
+      // if the principal is the omnipotent principal do not sync it to target
       if (principal.getProperties() != null
               && principal.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
         skippedPrincipals.add(principal);
         continue;
       }
 
+      // do not modify root principal
       if (principal.getName().equals("root")) {
         skippedPrincipals.add(principal);
         continue;
@@ -61,12 +63,15 @@ public class AccessControlAwarePlanner extends DelegatedPlanner implements Synch
     }
 
     for (Principal principal : principalsOnTarget) {
+      // if the principal is the omnipotent principal, ensure it is not modified
+      // on the target
       if (principal.getProperties() != null
               && principal.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
         skippedPrincipals.add(principal);
         continue;
       }
 
+      // do not modify root principal
       if (principal.getName().equals("root")) {
         skippedPrincipals.add(principal);
         continue;
@@ -79,7 +84,62 @@ public class AccessControlAwarePlanner extends DelegatedPlanner implements Synch
             delegate.planPrincipalSync(filteredPrincipalsSource, filteredPrincipalsTarget);
 
     for (Principal principal : skippedPrincipals) {
-      delegatedPlan.skipEntity(principal);
+      delegatedPlan.skipEntityAndSkipChildren(principal);
+    }
+
+    return delegatedPlan;
+  }
+
+  @Override
+  public SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget
+  ) {
+    List<PrincipalRole> skippedRoles = new ArrayList<>();
+    List<PrincipalRole> filteredRolesSource = new ArrayList<>();
+    List<PrincipalRole> filteredRolesTarget = new ArrayList<>();
+
+    for (PrincipalRole role : assignedPrincipalRolesOnSource) {
+      // filter out assignment to omnipotent principal role
+      if (role.getProperties() != null
+              && role.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
+        skippedRoles.add(role);
+        continue;
+      }
+
+      // filter out assignment to service admin
+      if (role.getName().equals("service_admin")) {
+        skippedRoles.add(role);
+        continue;
+      }
+
+      filteredRolesSource.add(role);
+    }
+
+    for (PrincipalRole role : assignedPrincipalRolesOnTarget) {
+      // filer out assignment to omnipotent principal role
+      if (role.getProperties() != null
+              && role.getProperties().containsKey(AccessControlConstants.OMNIPOTENCE_PROPERTY)) {
+        skippedRoles.add(role);
+        continue;
+      }
+
+      // filter out assignment to service admin
+      if (role.getName().equals("service_admin")) {
+        skippedRoles.add(role);
+        continue;
+      }
+
+      filteredRolesTarget.add(role);
+    }
+
+    SynchronizationPlan<PrincipalRole> delegatedPlan =
+            this.delegate.planAssignPrincipalsToPrincipalRolesSync(
+                    principalName, filteredRolesSource, filteredRolesTarget);
+
+    for (PrincipalRole role : skippedRoles) {
+      delegatedPlan.skipEntity(role);
     }
 
     return delegatedPlan;

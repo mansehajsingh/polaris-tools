@@ -50,8 +50,8 @@ public class AccessControlAwarePlannerTest {
     SynchronizationPlan<Principal> plan = accessControlAwarePlanner
             .planPrincipalSync(List.of(omnipotentPrincipalSource), List.of(omnipotentPrincipalTarget));
 
-    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalSource));
-    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalTarget));
+    Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(omnipotentPrincipalSource));
+    Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(omnipotentPrincipalTarget));
   }
 
   private static final Principal rootPrincipalSource = new Principal().name("root");
@@ -66,8 +66,8 @@ public class AccessControlAwarePlannerTest {
     SynchronizationPlan<Principal> plan = accessControlAwarePlanner
             .planPrincipalSync(List.of(rootPrincipalSource), List.of(rootPrincipalTarget));
 
-    Assertions.assertTrue(plan.entitiesToSkip().contains(rootPrincipalSource));
-    Assertions.assertTrue(plan.entitiesToSkip().contains(rootPrincipalTarget));
+    Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(rootPrincipalSource));
+    Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(rootPrincipalTarget));
   }
 
   private static final PrincipalRole omnipotentPrincipalRoleSource =

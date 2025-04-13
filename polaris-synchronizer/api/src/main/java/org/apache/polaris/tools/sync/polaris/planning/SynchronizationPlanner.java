@@ -38,6 +38,11 @@ public interface SynchronizationPlanner {
   SynchronizationPlan<Principal> planPrincipalSync(
           List<Principal> principalsOnSource, List<Principal> principalsOnTarget);
 
+  SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget);
+
   SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget);
 

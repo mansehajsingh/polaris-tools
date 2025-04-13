@@ -38,6 +38,15 @@ public class NoOpSyncPlanner implements SynchronizationPlanner {
   }
 
   @Override
+  public SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget
+  ) {
+    return new SynchronizationPlan<>();
+  }
+
+  @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget) {
     return new SynchronizationPlan<>();

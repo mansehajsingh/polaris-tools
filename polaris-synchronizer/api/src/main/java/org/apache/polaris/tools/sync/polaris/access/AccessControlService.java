@@ -149,7 +149,7 @@ public class AccessControlService {
     }
 
     polaris.createPrincipalRole(omnipotentPrincipalRole, false);
-    polaris.assignPrincipalRole(
+    polaris.assignPrincipalRoleToPrincipal(
         omnipotentPrincipal.getPrincipal().getName(), omnipotentPrincipalRole.getName());
     return omnipotentPrincipalRole;
   }

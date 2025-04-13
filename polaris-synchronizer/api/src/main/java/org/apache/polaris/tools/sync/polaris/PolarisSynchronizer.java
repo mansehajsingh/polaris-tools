@@ -34,7 +34,6 @@ import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
-import org.apache.polaris.tools.sync.polaris.access.PrincipalCredentialCaptor;
 import org.apache.polaris.tools.sync.polaris.catalog.BaseTableWithETag;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
 import org.apache.polaris.tools.sync.polaris.catalog.NotModifiedException;
@@ -70,8 +69,6 @@ public class PolarisSynchronizer {
 
   private final AccessControlService targetAccessControlService;
 
-  private final PrincipalCredentialCaptor principalCredentialCaptor;
-
   private final ETagService etagService;
 
   public PolarisSynchronizer(
@@ -81,8 +78,7 @@ public class PolarisSynchronizer {
       PrincipalWithCredentials targetOmnipotentPrincipal,
       PolarisService source,
       PolarisService target,
-      ETagService etagService,
-      PrincipalCredentialCaptor principalCredentialCaptor) {
+      ETagService etagService) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.syncPlanner = synchronizationPlanner;
@@ -100,7 +96,6 @@ public class PolarisSynchronizer {
         targetAccessControlService.getOmnipotentPrincipalRoleForPrincipal(
             targetOmnipotentPrincipal.getPrincipal().getName());
     this.etagService = etagService;
-    this.principalCredentialCaptor = principalCredentialCaptor;
   }
 
   /**
@@ -141,7 +136,7 @@ public class PolarisSynchronizer {
             syncPlanner.planPrincipalSync(principalsSource, principalsTarget);
 
     principalSyncPlan
-            .entitiesToSkip()
+            .entitiesToSkipAndSkipChildren()
             .forEach(
                     principal ->
                             clientLogger.info("Skipping principal {}.", principal.getName()));
@@ -160,9 +155,13 @@ public class PolarisSynchronizer {
     for (Principal principal : principalSyncPlan.entitiesToCreate()) {
       try {
         PrincipalWithCredentials createdPrincipal = target.createPrincipal(principal, false /* overwrite */);
-        principalCredentialCaptor.storePrincipal(createdPrincipal);
-        clientLogger.info("Created principal {} on target. - {}/{}",
-                principal.getName(), ++syncsCompleted, totalSyncsToComplete);
+        clientLogger.info("Created principal {} on target. Target credentials: {}:{} - {}/{}",
+                principal.getName(),
+                createdPrincipal.getCredentials().getClientId(),
+                createdPrincipal.getCredentials().getClientSecret(),
+                ++syncsCompleted,
+                totalSyncsToComplete
+        );
       } catch (Exception e) {
         clientLogger.error("Failed to create principal {} on target. - {}/{}",
                 principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
@@ -172,9 +171,13 @@ public class PolarisSynchronizer {
     for (Principal principal : principalSyncPlan.entitiesToOverwrite()) {
       try {
         PrincipalWithCredentials overwrittenPrincipal = target.createPrincipal(principal, true /* overwrite */);
-        principalCredentialCaptor.storePrincipal(overwrittenPrincipal);
-        clientLogger.info("Overwrote principal {} on target. - {}/{}",
-                principal.getName(), ++syncsCompleted, totalSyncsToComplete);
+        clientLogger.info("Overwrote principal {} on target. Target credentials: {}:{} - {}/{}",
+                principal.getName(),
+                overwrittenPrincipal.getCredentials().getClientId(),
+                overwrittenPrincipal.getCredentials().getClientSecret(),
+                ++syncsCompleted,
+                totalSyncsToComplete
+        );
       } catch (Exception e) {
         clientLogger.error("Failed to overwrite principal {} on target. - {}/{}",
                 principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
@@ -189,6 +192,89 @@ public class PolarisSynchronizer {
       } catch (Exception e) {
         clientLogger.error("Failed to remove principal {} ont target. - {}/{}",
                 principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+      }
+    }
+
+    for (Principal principal : principalSyncPlan.entitiesToSyncChildren()) {
+      syncAssignedPrincipalRolesForPrincipal(principal.getName());
+    }
+  }
+
+  public void syncAssignedPrincipalRolesForPrincipal(String principalName) {
+    List<PrincipalRole> assignedPrincipalRolesSource;
+
+    try {
+      assignedPrincipalRolesSource = source.listPrincipalRolesAssignedForPrincipal(principalName);
+      clientLogger.info("Listed {} assigned principal-roles for principal {} from source.",
+              assignedPrincipalRolesSource.size(), principalName);
+    } catch (Exception e) {
+      clientLogger.error("Failed to list assigned principal-roles for principal {} from source.", principalName, e);
+      return;
+    }
+
+    List<PrincipalRole> assignedPrincipalRolesTarget;
+
+    try {
+      assignedPrincipalRolesTarget = target.listPrincipalRolesAssignedForPrincipal(principalName);
+      clientLogger.info("Listed {} assigned principal-roles for principal {} from target.",
+              assignedPrincipalRolesTarget.size(), principalName);
+    } catch (Exception e) {
+      clientLogger.error("Failed to list assigned principal-roles for principal {} from target.", principalName, e);
+      return;
+    }
+
+    SynchronizationPlan<PrincipalRole> assignedPrincipalRoleSyncPlan =
+            syncPlanner.planAssignPrincipalsToPrincipalRolesSync(
+                    principalName, assignedPrincipalRolesSource, assignedPrincipalRolesTarget);
+
+    assignedPrincipalRoleSyncPlan
+            .entitiesToSkip()
+            .forEach(
+                    principalRole ->
+                            clientLogger.info("Skipping assignment of principal-role {} to principal {}.",
+                                    principalName, principalRole.getName()));
+
+    assignedPrincipalRoleSyncPlan
+            .entitiesNotModified()
+            .forEach(
+                    principalRole ->
+                            clientLogger.info(
+                                    "Principal {} is already assigned to principal-role {}, skipping.",
+                                    principalName, principalRole.getName()));
+
+    int syncsCompleted = 0;
+    final int totalSyncsToComplete = totalSyncsToComplete(assignedPrincipalRoleSyncPlan);
+
+    for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToCreate()) {
+      try {
+        target.assignPrincipalRoleToPrincipal(principalName, principalRole.getName());
+        clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to assign principal-role {} to principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+      }
+    }
+
+    for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToOverwrite()) {
+      try {
+        target.assignPrincipalRoleToPrincipal(principalName, principalRole.getName());
+        clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to assign principal-role {} to principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+      }
+    }
+
+    for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToRemove()) {
+      try {
+        target.revokePrincipalRoleFromPrincipal(principalName, principalRole.getName());
+        clientLogger.info("Revoked principal-role {} from principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error("Failed to revoke principal-role {} to principal {}. - {}/{}",
+                principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       }
     }
   }

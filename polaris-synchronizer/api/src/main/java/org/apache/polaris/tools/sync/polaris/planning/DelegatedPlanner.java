@@ -25,6 +25,7 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.GrantResource;
+import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
@@ -38,6 +39,22 @@ public abstract class DelegatedPlanner implements SynchronizationPlanner {
 
   public DelegatedPlanner(SynchronizationPlanner delegate) {
     this.delegate = delegate;
+  }
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    return delegate.planPrincipalSync(principalsOnSource, principalsOnTarget);
+  }
+
+  @Override
+  public SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget
+  ) {
+    return delegate.planAssignPrincipalsToPrincipalRolesSync(
+            principalName, assignedPrincipalRolesOnSource, assignedPrincipalRolesOnTarget);
   }
 
   @Override

@@ -93,10 +93,14 @@ public class PolarisService {
     this.api.deletePrincipal(principalName);
   }
 
-  public void assignPrincipalRole(String principalName, String principalRoleName) {
+  public void assignPrincipalRoleToPrincipal(String principalName, String principalRoleName) {
     GrantPrincipalRoleRequest request =
         new GrantPrincipalRoleRequest().principalRole(new PrincipalRole().name(principalRoleName));
     this.api.assignPrincipalRole(principalName, request);
+  }
+
+  public void revokePrincipalRoleFromPrincipal(String principalName, String principalRoleName) {
+    this.api.revokePrincipalRole(principalName, principalRoleName);
   }
 
   public void createPrincipalRole(PrincipalRole principalRole, boolean overwrite) {

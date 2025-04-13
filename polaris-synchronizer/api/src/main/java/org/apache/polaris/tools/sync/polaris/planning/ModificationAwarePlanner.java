@@ -21,12 +21,17 @@ package org.apache.polaris.tools.sync.polaris.planning;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
@@ -35,6 +40,7 @@ import org.apache.polaris.core.admin.model.GrantResource;
 import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
+import org.eclipse.collections.impl.block.procedure.CollectIfProcedure;
 
 /** Planner that checks for modifications and plans to skip entities that have not been modified. */
 public class ModificationAwarePlanner implements SynchronizationPlanner {
@@ -156,35 +162,106 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
     return areSame(o1, o2, DEFAULT_KEYS_TO_IGNORE);
   }
 
-  @Override
-  public SynchronizationPlan<Principal> planPrincipalSync(List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
-    Map<String, Principal> sourcePrincipalsByName = new HashMap<>();
-    Map<String, Principal> targetPrincipalsByName = new HashMap<>();
+  /**
+   * Container to represent the result of filtering out entities that are on both the source and the target
+   * and have not been modified.
+   * @param filteredEntitiesSource entities on the source that are do not exist on the
+   *                               target or are different from the target for the same identifier
+   * @param filteredEntitiesTarget entities on the target that do not exist on the source or are different from the
+   *                               source for the same identifier
+   * @param notModifiedEntities entities from the source that have not been modified since migration to the target
+   * @param <T> the entity type
+   */
+  private record FilteredNotModifiedEntityResult<T>(
+          List<T> filteredEntitiesSource, List<T> filteredEntitiesTarget, List<T> notModifiedEntities) {}
 
-    List<Principal> notModifiedPrincipals = new ArrayList<>();
+  /**
+   * Filter out entities that are the same across the source and target Polaris instance.
+   * @param entitiesOnSource the entities from the source
+   * @param entitiesOnTarget the entities from the target
+   * @param entityIdentifierSupplier supplies an identifier to identify the same entity on the source and target
+   * @param entitiesAreSame compares entity with same identifier on source and target, returns true if they are the same,
+   *                        false otherwise
+   * @return the entities on the source and target with unmodified entities filtered out
+   * @param <T> the entity type
+   */
+  private <T> FilteredNotModifiedEntityResult<T> filterOutEntitiesNotModified(
+          Collection<T> entitiesOnSource,
+          Collection<T> entitiesOnTarget,
+          Function<T, Object> entityIdentifierSupplier,
+          BiFunction<T, T, Boolean> entitiesAreSame
+  ) {
+    Map<Object, T> sourceEntitiesById = new HashMap<>();
+    Map<Object, T> targetEntitiesById = new HashMap<>();
 
-    principalsOnSource.forEach(principal -> sourcePrincipalsByName.put(principal.getName(), principal));
-    principalsOnTarget.forEach(principal -> targetPrincipalsByName.put(principal.getName(), principal));
+    List<T> notModifiedEntities = new ArrayList<>();
 
-    for (Principal sourcePrincipal : principalsOnSource) {
-      if (targetPrincipalsByName.containsKey(sourcePrincipal.getName())) {
-        Principal targetPrincipal = targetPrincipalsByName.get(sourcePrincipal.getName());
+    entitiesOnSource.forEach(entity -> sourceEntitiesById.put(entityIdentifierSupplier.apply(entity), entity));
+    entitiesOnTarget.forEach(entity -> targetEntitiesById.put(entityIdentifierSupplier.apply(entity), entity));
 
-        if (areSame(sourcePrincipal, targetPrincipal, PRINCIPAL_KEYS_TO_IGNORE)) {
-          notModifiedPrincipals.add(sourcePrincipal);
-          sourcePrincipalsByName.remove(sourcePrincipal.getName());
-          targetPrincipalsByName.remove(targetPrincipal.getName());
+    for (T sourceEntity : entitiesOnSource) {
+      Object sourceEntityId = entityIdentifierSupplier.apply(sourceEntity);
+      if (targetEntitiesById.containsKey(sourceEntityId)) {
+        T targetEntity = targetEntitiesById.get(sourceEntityId);
+        Object targetEntityId = entityIdentifierSupplier.apply(targetEntity);
+
+        if (entitiesAreSame.apply(sourceEntity, targetEntity)) {
+          notModifiedEntities.add(sourceEntity);
+          sourceEntitiesById.remove(sourceEntityId);
+          targetEntitiesById.remove(targetEntityId);
         }
       }
     }
 
-    SynchronizationPlan<Principal> delegatedPlan = delegate.planPrincipalSync(
-            sourcePrincipalsByName.values().stream().toList(),
-            targetPrincipalsByName.values().stream().toList()
+    return new FilteredNotModifiedEntityResult<>(
+            sourceEntitiesById.values().stream().toList(),
+            targetEntitiesById.values().stream().toList(),
+            notModifiedEntities
+    );
+  }
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    FilteredNotModifiedEntityResult<Principal> result = filterOutEntitiesNotModified(
+            principalsOnSource,
+            principalsOnTarget,
+            Principal::getName,
+            (p1, p2) -> areSame(p1, p2, PRINCIPAL_KEYS_TO_IGNORE)
     );
 
-    for (Principal principal : notModifiedPrincipals) {
+    SynchronizationPlan<Principal> delegatedPlan = delegate.planPrincipalSync(
+            result.filteredEntitiesSource(),
+            result.filteredEntitiesTarget()
+    );
+
+    for (Principal principal : result.notModifiedEntities()) {
       delegatedPlan.skipEntityNotModified(principal);
+    }
+
+    return delegatedPlan;
+  }
+
+  @Override
+  public SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget
+  ) {
+    FilteredNotModifiedEntityResult<PrincipalRole> result = filterOutEntitiesNotModified(
+            assignedPrincipalRolesOnSource,
+            assignedPrincipalRolesOnTarget,
+            PrincipalRole::getName,
+            this::areSame
+    );
+
+    SynchronizationPlan<PrincipalRole> delegatedPlan =
+            delegate.planAssignPrincipalsToPrincipalRolesSync(
+                    principalName,
+                    result.filteredEntitiesSource(),
+                    result.filteredEntitiesTarget());
+
+    for (PrincipalRole principalRole : result.notModifiedEntities()) {
+      delegatedPlan.skipEntityNotModified(principalRole);
     }
 
     return delegatedPlan;
@@ -193,32 +270,19 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
   @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget) {
-    Map<String, PrincipalRole> sourceRolesByName = new HashMap<>();
-    Map<String, PrincipalRole> targetRolesByName = new HashMap<>();
-
-    List<PrincipalRole> notModifiedPrincipalRoles = new ArrayList<>();
-
-    principalRolesOnSource.forEach(role -> sourceRolesByName.put(role.getName(), role));
-    principalRolesOnTarget.forEach(role -> targetRolesByName.put(role.getName(), role));
-
-    for (PrincipalRole sourceRole : principalRolesOnSource) {
-      if (targetRolesByName.containsKey(sourceRole.getName())) {
-        PrincipalRole targetRole = targetRolesByName.get(sourceRole.getName());
-
-        if (areSame(sourceRole, targetRole)) {
-          targetRolesByName.remove(targetRole.getName());
-          sourceRolesByName.remove(sourceRole.getName());
-          notModifiedPrincipalRoles.add(sourceRole);
-        }
-      }
-    }
+    FilteredNotModifiedEntityResult<PrincipalRole> result = filterOutEntitiesNotModified(
+      principalRolesOnSource,
+      principalRolesOnTarget,
+      PrincipalRole::getName,
+      this::areSame
+    );
 
     SynchronizationPlan<PrincipalRole> delegatedPlan =
         delegate.planPrincipalRoleSync(
-            sourceRolesByName.values().stream().toList(),
-            targetRolesByName.values().stream().toList());
+            result.filteredEntitiesSource(),
+            result.filteredEntitiesTarget());
 
-    for (PrincipalRole principalRole : notModifiedPrincipalRoles) {
+    for (PrincipalRole principalRole : result.notModifiedEntities()) {
       delegatedPlan.skipEntityNotModified(principalRole);
     }
 
@@ -240,32 +304,19 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
   @Override
   public SynchronizationPlan<Catalog> planCatalogSync(
       List<Catalog> catalogsOnSource, List<Catalog> catalogsOnTarget) {
-    Map<String, Catalog> sourceCatalogsByName = new HashMap<>();
-    Map<String, Catalog> targetCatalogsByName = new HashMap<>();
-
-    List<Catalog> notModifiedCatalogs = new ArrayList<>();
-
-    catalogsOnSource.forEach(catalog -> sourceCatalogsByName.put(catalog.getName(), catalog));
-    catalogsOnTarget.forEach(catalog -> targetCatalogsByName.put(catalog.getName(), catalog));
-
-    for (Catalog sourceCatalog : catalogsOnSource) {
-      if (targetCatalogsByName.containsKey(sourceCatalog.getName())) {
-        Catalog targetCatalog = targetCatalogsByName.get(sourceCatalog.getName());
-
-        if (areSame(sourceCatalog, targetCatalog)) {
-          targetCatalogsByName.remove(targetCatalog.getName());
-          sourceCatalogsByName.remove(sourceCatalog.getName());
-          notModifiedCatalogs.add(sourceCatalog);
-        }
-      }
-    }
+    FilteredNotModifiedEntityResult<Catalog> result = filterOutEntitiesNotModified(
+            catalogsOnSource,
+            catalogsOnTarget,
+            Catalog::getName,
+            this::areSame
+    );
 
     SynchronizationPlan<Catalog> delegatedPlan =
         delegate.planCatalogSync(
-            sourceCatalogsByName.values().stream().toList(),
-            targetCatalogsByName.values().stream().toList());
+            result.filteredEntitiesSource(),
+            result.filteredEntitiesTarget());
 
-    for (Catalog catalog : notModifiedCatalogs) {
+    for (Catalog catalog : result.notModifiedEntities()) {
       delegatedPlan.skipEntityNotModified(catalog);
     }
 
@@ -277,33 +328,20 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
       String catalogName,
       List<CatalogRole> catalogRolesOnSource,
       List<CatalogRole> catalogRolesOnTarget) {
-    Map<String, CatalogRole> sourceCatalogRolesByName = new HashMap<>();
-    Map<String, CatalogRole> targetCatalogRolesByName = new HashMap<>();
-
-    List<CatalogRole> notModifiedCatalogRoles = new ArrayList<>();
-
-    catalogRolesOnSource.forEach(role -> sourceCatalogRolesByName.put(role.getName(), role));
-    catalogRolesOnTarget.forEach(role -> targetCatalogRolesByName.put(role.getName(), role));
-
-    for (CatalogRole sourceCatalogRole : catalogRolesOnSource) {
-      if (targetCatalogRolesByName.containsKey(sourceCatalogRole.getName())) {
-        CatalogRole targetCatalogRole = targetCatalogRolesByName.get(sourceCatalogRole.getName());
-
-        if (areSame(sourceCatalogRole, targetCatalogRole)) {
-          targetCatalogRolesByName.remove(targetCatalogRole.getName());
-          sourceCatalogRolesByName.remove(sourceCatalogRole.getName());
-          notModifiedCatalogRoles.add(sourceCatalogRole);
-        }
-      }
-    }
+    FilteredNotModifiedEntityResult<CatalogRole> result = filterOutEntitiesNotModified(
+            catalogRolesOnSource,
+            catalogRolesOnTarget,
+            CatalogRole::getName,
+            this::areSame
+    );
 
     SynchronizationPlan<CatalogRole> delegatedPlan =
         delegate.planCatalogRoleSync(
             catalogName,
-            sourceCatalogRolesByName.values().stream().toList(),
-            targetCatalogRolesByName.values().stream().toList());
+            result.filteredEntitiesSource(),
+            result.filteredEntitiesTarget());
 
-    for (CatalogRole catalogRole : notModifiedCatalogRoles) {
+    for (CatalogRole catalogRole : result.notModifiedEntities()) {
       delegatedPlan.skipEntityNotModified(catalogRole);
     }
 
@@ -316,27 +354,21 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
       String catalogRoleName,
       List<GrantResource> grantsOnSource,
       List<GrantResource> grantsOnTarget) {
-    Set<GrantResource> sourceGrants = new HashSet<>(grantsOnSource);
-    Set<GrantResource> targetGrants = new HashSet<>(grantsOnTarget);
-
-    List<GrantResource> notModifiedGrants = new ArrayList<>();
-
-    for (GrantResource grantResource : grantsOnSource) {
-      if (targetGrants.contains(grantResource)) {
-        sourceGrants.remove(grantResource);
-        targetGrants.remove(grantResource);
-        notModifiedGrants.add(grantResource);
-      }
-    }
+    FilteredNotModifiedEntityResult<GrantResource> result = filterOutEntitiesNotModified(
+            grantsOnSource,
+            grantsOnTarget,
+            grant -> grant,
+            GrantResource::equals
+    );
 
     SynchronizationPlan<GrantResource> delegatedPlan =
         delegate.planGrantSync(
             catalogName,
             catalogRoleName,
-            sourceGrants.stream().toList(),
-            targetGrants.stream().toList());
+            result.filteredEntitiesSource(),
+            result.filteredEntitiesTarget());
 
-    for (GrantResource grant : notModifiedGrants) {
+    for (GrantResource grant : result.notModifiedEntities()) {
       delegatedPlan.skipEntityNotModified(grant);
     }
 
@@ -349,11 +381,23 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
       String catalogRoleName,
       List<PrincipalRole> assignedPrincipalRolesOnSource,
       List<PrincipalRole> assignedPrincipalRolesOnTarget) {
-    return delegate.planAssignPrincipalRolesToCatalogRolesSync(
+    FilteredNotModifiedEntityResult<PrincipalRole> result = filterOutEntitiesNotModified(
+            assignedPrincipalRolesOnSource,
+            assignedPrincipalRolesOnTarget,
+            PrincipalRole::getName,
+            this::areSame
+    );
+
+    SynchronizationPlan<PrincipalRole> delegatedPlan = delegate.planAssignPrincipalRolesToCatalogRolesSync(
         catalogName,
         catalogRoleName,
         assignedPrincipalRolesOnSource,
         assignedPrincipalRolesOnTarget);
+
+    for (PrincipalRole principalRole : result.notModifiedEntities()) {
+      delegatedPlan.skipEntityNotModified(principalRole);
+    }
+    return delegatedPlan;
   }
 
   @Override

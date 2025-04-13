@@ -18,8 +18,10 @@
  */
 package org.apache.polaris.tools.sync.polaris.planning;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -37,92 +39,99 @@ import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
  */
 public class SourceParitySynchronizationPlanner implements SynchronizationPlanner {
 
-  @Override
-  public SynchronizationPlan<Principal> planPrincipalSync(
-          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
-    Set<String> sourcePrincipalNames = principalsOnSource.stream().map(Principal::getName).collect(Collectors.toSet());
-    Set<String> targetPrincipalNames = principalsOnTarget.stream().map(Principal::getName).collect(Collectors.toSet());
+  /**
+   * Sort entities from the source into create, overwrite, and remove categories
+   * on the basis of which identifiers exist on the source and target Polaris.
+   * Identifiers that are both on the source and target instance will be marked
+   * for overwrite. Entities that are only on the source instance will be marked for
+   * creation. Entities that are only on the target instance will be marked for deletion.
+   * @param entitiesOnSource the entities from the source
+   * @param entitiesOnTarget the entities from the target
+   * @param supportOverwrites true if "overwriting" the entity is necessary. Most grant record entities do not need overwriting.
+   * @param entityIdentifierSupplier consumes an entity and returns an identifying representation of that entity
+   * @return a {@link SynchronizationPlan} with the entities sorted based on the souce parity strategy
+   * @param <T> the type of the entity
+   */
+  private <T> SynchronizationPlan<T> sortOnIdentifier(
+          Collection<T> entitiesOnSource,
+          Collection<T> entitiesOnTarget,
+          boolean supportOverwrites,
+          Function<T, Object> entityIdentifierSupplier
+  ) {
+    Set<Object> sourceEntityIdentifiers = entitiesOnSource.stream().map(entityIdentifierSupplier).collect(Collectors.toSet());
+    Set<Object> targetEntityIdentifiers = entitiesOnTarget.stream().map(entityIdentifierSupplier).collect(Collectors.toSet());
 
-    SynchronizationPlan<Principal> plan = new SynchronizationPlan<>();
+    SynchronizationPlan<T> plan = new SynchronizationPlan<>();
 
-    for (Principal principal : principalsOnSource) {
-      if (targetPrincipalNames.contains(principal.getName())) {
-        // overwrite the entity on the target if it exists on the source
-        plan.overwriteEntity(principal);
+    for (T entityOnSource : entitiesOnSource) {
+      Object sourceEntityId = entityIdentifierSupplier.apply(entityOnSource);
+      if (targetEntityIdentifiers.contains(sourceEntityId)) {
+        if (supportOverwrites) {
+          // if the same entity identifier is on the source and the target,
+          // overwrite the one on the target with the one on the source
+          plan.overwriteEntity(entityOnSource);
+        }
       } else {
-        // create the entity on the target if not exists
-        plan.createEntity(principal);
+        // if the entity identifier only exists on the source, that means
+        // we need to create it for the first time on the target
+        plan.createEntity(entityOnSource);
       }
     }
 
-    for (Principal principal : principalsOnTarget) {
-      if (!sourcePrincipalNames.contains(principal.getName())) {
-        // remove the entity from the target if it doesn't exist on the source
-        plan.removeEntity(principal);
+    for (T entityOnTarget : entitiesOnTarget) {
+      Object targetEntityId = entityIdentifierSupplier.apply(entityOnTarget);
+      if (!sourceEntityIdentifiers.contains(targetEntityId)) {
+        // if the entity exists on the target but doesn't exist on the source,
+        // clean it up from the target
+
+        // this is especially important for access control entities, as, for example,
+        // we could have a scenario where a grant was revoked from a catalog role,
+        // or a catalog role was revoked from a principal role, in which case the target
+        // should reflect this change when the tool is run multiple times, because we don't
+        // want to take chances with over-extending privileges
+        plan.removeEntity(entityOnTarget);
       }
     }
 
     return plan;
+  }
+
+  @Override
+  public SynchronizationPlan<Principal> planPrincipalSync(
+          List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
+    return sortOnIdentifier(principalsOnSource, principalsOnTarget, /* supportsOverwrites */ true, Principal::getName);
+  }
+
+  @Override
+  public SynchronizationPlan<PrincipalRole> planAssignPrincipalsToPrincipalRolesSync(
+          String principalName,
+          List<PrincipalRole> assignedPrincipalRolesOnSource,
+          List<PrincipalRole> assignedPrincipalRolesOnTarget
+  ) {
+    return sortOnIdentifier(
+            assignedPrincipalRolesOnSource,
+            assignedPrincipalRolesOnTarget,
+            /* supportsOverwrites */ false, // do not need to overwrite an assignment of a principal role to a principal
+            PrincipalRole::getName
+    );
   }
 
   @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget) {
-    Set<String> sourcePrincipalRoleNames =
-        principalRolesOnSource.stream().map(PrincipalRole::getName).collect(Collectors.toSet());
-    Set<String> targetPrincipalRoleNames =
-        principalRolesOnTarget.stream().map(PrincipalRole::getName).collect(Collectors.toSet());
 
-    SynchronizationPlan<PrincipalRole> plan = new SynchronizationPlan<>();
-
-    for (PrincipalRole principalRole : principalRolesOnSource) {
-      if (targetPrincipalRoleNames.contains(principalRole.getName())) {
-        // overwrite roles that exist on both
-        plan.overwriteEntity(principalRole);
-      } else {
-        // create roles on target that only exist on source
-        plan.createEntity(principalRole);
-      }
-    }
-
-    // remove roles that aren't on source
-    for (PrincipalRole principalRole : principalRolesOnTarget) {
-      if (!sourcePrincipalRoleNames.contains(principalRole.getName())) {
-        plan.removeEntity(principalRole);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(
+            principalRolesOnSource,
+            principalRolesOnTarget,
+            /* supportsOverwrites */ true,
+            PrincipalRole::getName
+    );
   }
 
   @Override
   public SynchronizationPlan<Catalog> planCatalogSync(
       List<Catalog> catalogsOnSource, List<Catalog> catalogsOnTarget) {
-    Set<String> sourceCatalogNames =
-        catalogsOnSource.stream().map(Catalog::getName).collect(Collectors.toSet());
-    Set<String> targetCatalogNames =
-        catalogsOnTarget.stream().map(Catalog::getName).collect(Collectors.toSet());
-
-    SynchronizationPlan<Catalog> plan = new SynchronizationPlan<>();
-
-    for (Catalog catalog : catalogsOnSource) {
-      if (targetCatalogNames.contains(catalog.getName())) {
-        // overwrite catalogs on target that exist on both
-        plan.overwriteEntity(catalog);
-      } else {
-        // create catalogs on target that exist only on source
-        plan.createEntity(catalog);
-      }
-    }
-
-    // remove catalogs that are only on target
-    for (Catalog catalog : catalogsOnTarget) {
-      if (!sourceCatalogNames.contains(catalog.getName())) {
-        plan.removeEntity(catalog);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(catalogsOnSource, catalogsOnTarget,  /* supportsOverwrites */ true, Catalog::getName);
   }
 
   @Override
@@ -130,31 +139,8 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       String catalogName,
       List<CatalogRole> catalogRolesOnSource,
       List<CatalogRole> catalogRolesOnTarget) {
-    Set<String> sourceCatalogRoleNames =
-        catalogRolesOnSource.stream().map(CatalogRole::getName).collect(Collectors.toSet());
-    Set<String> targetCatalogRoleNames =
-        catalogRolesOnTarget.stream().map(CatalogRole::getName).collect(Collectors.toSet());
-
-    SynchronizationPlan<CatalogRole> plan = new SynchronizationPlan<>();
-
-    for (CatalogRole catalogRole : catalogRolesOnSource) {
-      if (targetCatalogRoleNames.contains(catalogRole.getName())) {
-        plan.overwriteEntity(catalogRole);
-        // overwrite catalog roles on both
-      } else {
-        // create catalog roles on target that are only on source
-        plan.createEntity(catalogRole);
-      }
-    }
-
-    // remove catalog roles on both the source and target
-    for (CatalogRole catalogRole : catalogRolesOnTarget) {
-      if (!sourceCatalogRoleNames.contains(catalogRole.getName())) {
-        plan.removeEntity(catalogRole);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(
+            catalogRolesOnSource, catalogRolesOnTarget, /* supportsOverwrites */ true, CatalogRole::getName);
   }
 
   @Override
@@ -163,27 +149,12 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       String catalogRoleName,
       List<GrantResource> grantsOnSource,
       List<GrantResource> grantsOnTarget) {
-    Set<GrantResource> grantsSourceSet = Set.copyOf(grantsOnSource);
-    Set<GrantResource> grantsTargetSet = Set.copyOf(grantsOnTarget);
-
-    SynchronizationPlan<GrantResource> plan = new SynchronizationPlan<>();
-
-    // special case: no concept of overwriting a grant
-    // it exists and cannot change, so just create new ones
-    for (GrantResource grant : grantsOnSource) {
-      if (!grantsTargetSet.contains(grant)) {
-        plan.createEntity(grant);
-      }
-    }
-
-    // remove grants that are not on the source
-    for (GrantResource grant : grantsOnTarget) {
-      if (!grantsSourceSet.contains(grant)) {
-        plan.removeEntity(grant);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(
+            grantsOnSource,
+            grantsOnTarget,
+            /* supportsOverwrites */ false,
+            grant -> grant // grants can just be compared by the entire generated object
+    );
   }
 
   @Override
@@ -192,33 +163,12 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       String catalogRoleName,
       List<PrincipalRole> assignedPrincipalRolesOnSource,
       List<PrincipalRole> assignedPrincipalRolesOnTarget) {
-    Set<String> sourcePrincipalRoleNames =
-        assignedPrincipalRolesOnSource.stream()
-            .map(PrincipalRole::getName)
-            .collect(Collectors.toSet());
-    Set<String> targetPrincipalRoleNames =
-        assignedPrincipalRolesOnTarget.stream()
-            .map(PrincipalRole::getName)
-            .collect(Collectors.toSet());
-
-    SynchronizationPlan<PrincipalRole> plan = new SynchronizationPlan<>();
-
-    // special case: no concept of overwriting an assignment of principal role to catalog role
-    // it either exists or it doesn't, it cannot change
-    for (PrincipalRole principalRole : assignedPrincipalRolesOnSource) {
-      if (!targetPrincipalRoleNames.contains(principalRole.getName())) {
-        plan.createEntity(principalRole);
-      }
-    }
-
-    // revoke principal roles that do not exist on the source
-    for (PrincipalRole principalRole : assignedPrincipalRolesOnTarget) {
-      if (!sourcePrincipalRoleNames.contains(principalRole.getName())) {
-        plan.removeEntity(principalRole);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(
+            assignedPrincipalRolesOnSource,
+            assignedPrincipalRolesOnTarget,
+            /* supportsOverwrites */ false,
+            PrincipalRole::getName
+    );
   }
 
   @Override
@@ -227,26 +177,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       Namespace namespace,
       List<Namespace> namespacesOnSource,
       List<Namespace> namespacesOnTarget) {
-    SynchronizationPlan<Namespace> plan = new SynchronizationPlan<>();
-
-    for (Namespace ns : namespacesOnSource) {
-      if (namespacesOnTarget.contains(ns)) {
-        // overwrite the entity on the target with the entity on the source
-        plan.overwriteEntity(ns);
-      } else {
-        // if the namespace is not on the target, plan to create it
-        plan.createEntity(ns);
-      }
-    }
-
-    for (Namespace ns : namespacesOnTarget) {
-      if (!namespacesOnSource.contains(ns)) {
-        // remove namespaces that do not exist on the source but do exist on the target
-        plan.removeEntity(ns);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(namespacesOnSource, namespacesOnTarget, /* supportsOverwrites */ true, ns -> ns);
   }
 
   @Override
@@ -255,25 +186,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       Namespace namespace,
       Set<TableIdentifier> tablesOnSource,
       Set<TableIdentifier> tablesOnTarget) {
-    SynchronizationPlan<TableIdentifier> plan = new SynchronizationPlan<>();
-
-    for (TableIdentifier tableIdentifier : tablesOnSource) {
-      if (tablesOnTarget.contains(tableIdentifier)) {
-        // overwrite tables on target and source
-        plan.overwriteEntity(tableIdentifier);
-      } else {
-        // create tables on source but not target
-        plan.createEntity(tableIdentifier);
-      }
-    }
-
-    // remove tables only on target
-    for (TableIdentifier tableIdentifier : tablesOnTarget) {
-      if (!tablesOnSource.contains(tableIdentifier)) {
-        plan.removeEntity(tableIdentifier);
-      }
-    }
-
-    return plan;
+    return sortOnIdentifier(
+            tablesOnSource, tablesOnTarget, /* supportsOverwrites */ true, tableId -> tableId);
   }
 }
