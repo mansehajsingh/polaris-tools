@@ -35,8 +35,8 @@ import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
 import org.apache.polaris.tools.sync.polaris.catalog.BaseTableWithETag;
-import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
-import org.apache.polaris.tools.sync.polaris.catalog.NotModifiedException;
+import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
+import org.apache.polaris.tools.sync.polaris.catalog.MetadataNotModifiedException;
 import org.apache.polaris.tools.sync.polaris.catalog.PolarisCatalog;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
@@ -69,7 +69,7 @@ public class PolarisSynchronizer {
 
   private final AccessControlService targetAccessControlService;
 
-  private final ETagService etagService;
+  private final ETagManager etagManager;
 
   public PolarisSynchronizer(
       Logger clientLogger,
@@ -78,7 +78,7 @@ public class PolarisSynchronizer {
       PrincipalWithCredentials targetOmnipotentPrincipal,
       PolarisService source,
       PolarisService target,
-      ETagService etagService) {
+      ETagManager etagManager) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.syncPlanner = synchronizationPlanner;
@@ -95,7 +95,7 @@ public class PolarisSynchronizer {
     this.targetOmnipotentPrincipalRole =
         targetAccessControlService.getOmnipotentPrincipalRoleForPrincipal(
             targetOmnipotentPrincipal.getPrincipal().getName());
-    this.etagService = etagService;
+    this.etagManager = etagManager;
   }
 
   /**
@@ -200,6 +200,10 @@ public class PolarisSynchronizer {
     }
   }
 
+  /**
+   * Synchronize assigned principal roles for a principal from source to target.
+   * @param principalName the name of the principal to synchronize the principal roles for
+   */
   public void syncAssignedPrincipalRolesForPrincipal(String principalName) {
     List<PrincipalRole> assignedPrincipalRolesSource;
 
@@ -1208,7 +1212,7 @@ public class PolarisSynchronizer {
         }
 
         if (table instanceof BaseTableWithETag tableWithETag) {
-          etagService.storeETag(catalogName, tableId, tableWithETag.etag());
+          etagManager.storeETag(catalogName, tableId, tableWithETag.etag());
         }
 
         clientLogger.info(
@@ -1235,7 +1239,7 @@ public class PolarisSynchronizer {
         Table table;
 
         if (sourceIcebergCatalog instanceof PolarisCatalog polarisCatalog) {
-          String etag = etagService.getETag(catalogName, tableId);
+          String etag = etagManager.getETag(catalogName, tableId);
           table = polarisCatalog.loadTable(tableId, etag);
         } else {
           table = sourceIcebergCatalog.loadTable(tableId);
@@ -1250,7 +1254,7 @@ public class PolarisSynchronizer {
         }
 
         if (table instanceof BaseTableWithETag tableWithETag) {
-          etagService.storeETag(catalogName, tableId, tableWithETag.etag());
+          etagManager.storeETag(catalogName, tableId, tableWithETag.etag());
         }
 
         clientLogger.info(
@@ -1260,7 +1264,7 @@ public class PolarisSynchronizer {
             catalogName,
             ++syncsCompleted,
             totalSyncsToComplete);
-      } catch (NotModifiedException e) {
+      } catch (MetadataNotModifiedException e) {
         clientLogger.info(
             "Table {} in namespace {} in catalog {} with was not modified, not overwriting in target catalog. - {}/{}",
             tableId,

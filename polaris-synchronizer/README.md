@@ -16,16 +16,13 @@ Polaris specific entities, like principal-roles, catalog-roles, grants.
   failure. The tool can be scheduled on a cron to run periodic incremental syncs.
 
 The tool currently supports migrating the following Polaris Management entities:
+* Optionally, Principals (with `--sync-principals` flag). Credentials will be different on the target instance.
+* Optionally, assignment of Principal Roles to Principals (with `--sync-principals` flag)
 * Principal roles
 * Catalogs
-* Catalog Roles
-* Assignment of Catalog Roles to Principal Roles
-* Grants
-
-
-> :warning: Polaris principals and their assignments to Principal roles are not supported for migration
-> by this tool. Migrating client credentials stored in Polaris is not possible nor is it secure. Polaris
-> principals must be manually migrated between Polaris instances.
+  * Catalog Roles
+    * Assignment of Catalog Roles to Principal Roles
+    * Grants
 
 The tool currently supports migrating the following Iceberg entities:
 * Namespaces
@@ -33,7 +30,7 @@ The tool currently supports migrating the following Iceberg entities:
 
 # Building the Tool from Source
 
-**Prerequisite:** Must have Java installed in your machine (Java 21 is recommended and the minimum Java version) to use this CLI tool.
+**Prerequisite:** Must have Java installed in your machine (Java 21 is recommended as the minimum Java version) to use this CLI tool.
 
 ```
 gradlew build # build and run tests
@@ -138,6 +135,11 @@ clientSecret = <client-secret>
 Running the synchronization requires minimal reconfiguration, can be run idempotently, and will attempt to only copy over the
 diff between the source and target Polaris instances. This can be achieved using the `sync-polaris` command.
 
+> :warning: If you want to migrate principals and their assignments to principal-roles as well, run the tool with the
+> `--sync-principals` flag. Please note that this will reset the client credentials for that principal on the target 
+> Polaris instance. The new credentials will be logged to stdout, ONLY for each newly created or overwritten principal. 
+> Please note that this output should be securely managed, client credentials should only ever be stored in a secure vault.
+
 **Example** Running the synchronization between source Polaris instance using an access token, and a target Polaris instance
 using client credentials.
 ```
@@ -158,5 +160,6 @@ java -jar polaris-synchronizer-cli.jar sync-polaris \
 ```
 
 > :warning: The tool will not migrate the `service_admin`, `catalog_admin`, nor the omnipotent principals from the source
-> nor remove or modify them on the target. This is to accommodate that the tool itself will be running with the permission
-> levels for these principals and roles, and we do not want to modify the tool's permissions at runtime.
+> nor remove or modify them or their assignments to principals/principal-roles on the target. This is to accommodate that 
+> the tool itself will be running with the permission levels for these principals and roles, and we do not want to modify 
+> the tool's permissions at runtime.

@@ -47,6 +47,9 @@ import org.apache.polaris.tools.sync.polaris.http.OAuth2Util;
  * Iceberg REST Api and build the table metadata. This is necessary since the existing {@link
  * RESTCatalog} does not provide a way to capture response headers to retrieve the ETag on a
  * loadTable request.
+ *
+ * TODO: Remove this class once Iceberg gets first class support for ETags.
+ *   in the canonical response types.
  */
 public class PolarisCatalog extends RESTCatalog
     implements Catalog, ViewCatalog, SupportsNamespaces, Configurable<Object>, Closeable {
@@ -112,7 +115,7 @@ public class PolarisCatalog extends RESTCatalog
    * @param etag the etag
    * @return a {@link BaseTable} if no ETag was found in the response headers. A {@link
    *     BaseTableWithETag} if an ETag was included in the response headers.
-   * @throws NotModifiedException if the Iceberg REST catalog responded with 304 NOT MODIFIED
+   * @throws MetadataNotModifiedException if the Iceberg REST catalog responded with 304 NOT MODIFIED
    */
   public Table loadTable(TableIdentifier ident, String etag) {
     String catalogName = this.properties.get("warehouse");
@@ -143,7 +146,7 @@ public class PolarisCatalog extends RESTCatalog
 
     // api responded with 304 not modified, throw from here to signal
     if (response.statusCode() == HttpStatus.SC_NOT_MODIFIED) {
-      throw new NotModifiedException(ident);
+      throw new MetadataNotModifiedException(ident);
     }
 
     String body = response.body();

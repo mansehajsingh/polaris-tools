@@ -20,6 +20,10 @@ package org.apache.polaris.tools.sync.polaris.options;
 
 import picocli.CommandLine;
 
+/**
+ * Options for a generic Polaris instance. Use this for commands that only have to
+ * access one Polaris instance.
+ */
 public class PolarisOptions extends BasePolarisOptions {
 
   @Override

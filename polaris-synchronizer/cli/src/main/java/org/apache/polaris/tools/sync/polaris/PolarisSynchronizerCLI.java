@@ -20,6 +20,9 @@ package org.apache.polaris.tools.sync.polaris;
 
 import picocli.CommandLine;
 
+/**
+ * Main entrypoint into the tool CLI. Sets up some base level configuration for the commands to share.
+ */
 @CommandLine.Command(
     name = "polaris-synchronizer",
     mixinStandardHelpOptions = true,
@@ -33,7 +36,7 @@ public class PolarisSynchronizerCLI {
         new CommandLine(new PolarisSynchronizerCLI())
             .setExecutionExceptionHandler(
                 (ex, cmd, parseResult) -> {
-                  cmd.getErr().println(cmd.getColorScheme().richStackTraceString(ex));
+                  cmd.getErr().println(cmd.getColorScheme().richStackTraceString(ex)); // ensure stacktrace is printed
                   return 1;
                 });
     commandLine.setUsageHelpWidth(150);

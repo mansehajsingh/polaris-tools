@@ -20,6 +20,10 @@ package org.apache.polaris.tools.sync.polaris.options;
 
 import picocli.CommandLine;
 
+/**
+ * Prefixes omnipotent principal option names with "target" tags to identify that these are
+ * the connection properties for the target instance.
+ */
 public class TargetOmnipotentPrincipal extends BaseOmnipotentPrincipalOptions {
 
   @CommandLine.Option(

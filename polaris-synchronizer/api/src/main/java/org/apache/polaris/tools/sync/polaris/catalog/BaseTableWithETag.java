@@ -22,7 +22,12 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.metrics.MetricsReporter;
 
-/** Wrapper around {@link BaseTable} that contains the latest ETag for the table. */
+/**
+ * Wrapper around {@link BaseTable} that contains the latest ETag for the table.
+ *
+ * TODO: Remove this class once Iceberg gets first class support for ETags.
+ *  in the canonical response types.
+*/
 public class BaseTableWithETag extends BaseTable {
 
   private final String etag;

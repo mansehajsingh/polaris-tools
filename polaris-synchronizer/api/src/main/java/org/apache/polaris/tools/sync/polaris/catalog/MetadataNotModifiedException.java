@@ -20,14 +20,23 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import org.apache.iceberg.catalog.TableIdentifier;
 
-/** Implementation that returns nothing and stores no ETags. */
-public class NoOpETagService implements ETagService {
+/**
+ * Thrown when the metadata for a particular table was not modified from the version
+ * identified by a provided ETag.
+ *
+ * TODO: Remove once Iceberg has first class support for ETags.
+ */
+public class MetadataNotModifiedException extends RuntimeException {
 
-  @Override
-  public String getETag(String catalogName, TableIdentifier tableIdentifier) {
-    return null;
+  public MetadataNotModifiedException(TableIdentifier tableIdentifier) {
+    super("Table " + tableIdentifier + " was not modified.");
   }
 
-  @Override
-  public void storeETag(String catalogName, TableIdentifier tableIdentifier, String etag) {}
+  public MetadataNotModifiedException(String message) {
+    super(message);
+  }
+
+  public MetadataNotModifiedException(String message, Throwable cause) {
+    super(message, cause);
+  }
 }

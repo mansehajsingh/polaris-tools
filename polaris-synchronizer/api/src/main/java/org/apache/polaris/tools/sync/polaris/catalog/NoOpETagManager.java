@@ -20,27 +20,14 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import org.apache.iceberg.catalog.TableIdentifier;
 
-/**
- * Generic interface to provide and store ETags for tables within catalogs. This allows the storage
- * of the ETag to be completely independent from the tool.
- */
-public interface ETagService {
+/** Implementation that returns nothing and stores no ETags. */
+public class NoOpETagManager implements ETagManager {
 
-  /**
-   * Retrieves the ETag for the table.
-   *
-   * @param catalogName the catalog the table is in
-   * @param tableIdentifier the table identifier
-   * @return The ETag for the last known metadata for the table
-   */
-  String getETag(String catalogName, TableIdentifier tableIdentifier);
+  @Override
+  public String getETag(String catalogName, TableIdentifier tableIdentifier) {
+    return null;
+  }
 
-  /**
-   * After table loading, stores the fetched ETag.
-   *
-   * @param catalogName the catalog the table is in
-   * @param tableIdentifier the table identifier
-   * @param etag the ETag that was provided by the Iceberg REST api
-   */
-  void storeETag(String catalogName, TableIdentifier tableIdentifier, String etag);
+  @Override
+  public void storeETag(String catalogName, TableIdentifier tableIdentifier, String etag) {}
 }

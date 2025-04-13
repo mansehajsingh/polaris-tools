@@ -18,9 +18,19 @@
  */
 package org.apache.polaris.tools.sync.polaris.access;
 
+/**
+ * Constants related to access control logic.
+ */
 public class AccessControlConstants {
 
+  /**
+   * Property used to identify the omnipotent principal and all related access control entities
+   * across the source and target.
+   */
   public static final String OMNIPOTENCE_PROPERTY = "IS_OMNIPOTENT_PRINCIPAL";
 
+  /**
+   * Prefix to specify for naming an entity related to the omnipotent principal.
+   */
   protected static final String OMNIPOTENT_PRINCIPAL_NAME_PREFIX = "omnipotent-principal-";
 }

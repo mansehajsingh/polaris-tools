@@ -27,6 +27,9 @@ import org.apache.iceberg.io.LocationProvider;
 /**
  * Wrapper table operations class that just allows fetching a provided table metadata. Used to build
  * a {@link org.apache.iceberg.BaseTable} without having to expose a full-fledged operations class.
+ *
+ * TODO: Remove this class once Iceberg gets first class support for ETags.
+ *  in the canonical response types.
  */
 public class MetadataWrapperTableOperations implements TableOperations {
 

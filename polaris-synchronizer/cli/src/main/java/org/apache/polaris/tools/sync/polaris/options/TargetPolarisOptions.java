@@ -20,6 +20,10 @@ package org.apache.polaris.tools.sync.polaris.options;
 
 import picocli.CommandLine;
 
+/**
+ * Prefixes service_admin connection option names with "target" tags to identify that these are
+ * the connection properties for the target instance.
+ */
 public class TargetPolarisOptions extends BasePolarisOptions {
 
   @Override

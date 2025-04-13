@@ -22,6 +22,11 @@ import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentialsCredentials;
 
+/**
+ * Base options class to define the common set of omnipotent principal authentication and connection properties.
+ * Can be used to give options different names based on the command while still ensuring they all
+ * satisfy the same sets of necessary properties.
+ */
 public abstract class BaseOmnipotentPrincipalOptions {
 
   protected static final String PRINCIPAL_NAME = "omni-principal-name";

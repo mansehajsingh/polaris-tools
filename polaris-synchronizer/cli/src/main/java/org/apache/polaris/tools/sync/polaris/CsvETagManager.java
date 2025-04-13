@@ -32,10 +32,10 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
+import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 
 /** Implementation that stores/loads ETags to/from a CSV file. */
-public class CsvETagService implements ETagService, Closeable {
+public class CsvETagManager implements ETagManager, Closeable {
 
   private static final String CATALOG_HEADER = "Catalog";
 
@@ -49,7 +49,7 @@ public class CsvETagService implements ETagService, Closeable {
 
   private final Map<String, Map<TableIdentifier, String>> tablesByCatalogName;
 
-  public CsvETagService(File file) throws IOException {
+  public CsvETagManager(File file) throws IOException {
     this.tablesByCatalogName = new HashMap<>();
     this.file = file;
 

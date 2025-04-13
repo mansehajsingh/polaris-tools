@@ -29,6 +29,9 @@ import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
+/**
+ * No-op implementation that generates plans that direct no modifications to the target.
+ */
 public class NoOpSyncPlanner implements SynchronizationPlanner {
 
   @Override

@@ -23,8 +23,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Callable;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
-import org.apache.polaris.tools.sync.polaris.catalog.ETagService;
-import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagService;
+import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
+import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagManager;
 import org.apache.polaris.tools.sync.polaris.options.SourceOmniPotentPrincipalOptions;
 import org.apache.polaris.tools.sync.polaris.options.SourcePolarisOptions;
 import org.apache.polaris.tools.sync.polaris.options.TargetOmnipotentPrincipal;
@@ -37,6 +37,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
+/**
+ * Command to run the synchronization between a source and target Polaris instance.
+ */
 @CommandLine.Command(
     name = "sync-polaris",
     mixinStandardHelpOptions = true,
@@ -101,13 +104,13 @@ public class SyncPolarisCommand implements Callable<Integer> {
     PrincipalWithCredentials targetOmniPotentPrincipal =
         targetOmniPotentPrincipalOptions.buildPrincipalWithCredentials();
 
-    ETagService etagService;
+    ETagManager etagService;
 
     if (etagFilePath != null) {
       File etagFile = new File(etagFilePath);
-      etagService = new CsvETagService(etagFile);
+      etagService = new CsvETagManager(etagFile);
     } else {
-      etagService = new NoOpETagService();
+      etagService = new NoOpETagManager();
     }
 
     Runtime.getRuntime()

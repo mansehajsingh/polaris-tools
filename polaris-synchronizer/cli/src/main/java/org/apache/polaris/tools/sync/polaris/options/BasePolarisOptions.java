@@ -22,6 +22,11 @@ import java.io.IOException;
 import org.apache.polaris.tools.sync.polaris.PolarisService;
 import org.apache.polaris.tools.sync.polaris.PolarisServiceFactory;
 
+/**
+ * Base options class to define the common set of Polaris service admin authentication and connection properties.
+ * Can be used to give options different names based on the command while still ensuring they all
+ * satisfy the same sets of necessary properties.
+ */
 public abstract class BasePolarisOptions {
 
   protected static final String BASE_URL = "base-url";

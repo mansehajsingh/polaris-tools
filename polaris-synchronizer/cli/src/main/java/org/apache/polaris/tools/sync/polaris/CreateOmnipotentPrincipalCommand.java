@@ -36,6 +36,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
+/**
+ * Command that creates the omnipotent principal to access entities internal to a catalog with the appropriate
+ * grants.
+ */
 @CommandLine.Command(
     name = "create-omnipotent-principal",
     mixinStandardHelpOptions = true,
