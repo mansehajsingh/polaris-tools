@@ -22,6 +22,8 @@ import java.util.List;
 import org.apache.polaris.core.admin.model.AwsStorageConfigInfo;
 import org.apache.polaris.core.admin.model.AzureStorageConfigInfo;
 import org.apache.polaris.core.admin.model.Catalog;
+import org.apache.polaris.core.admin.model.CatalogGrant;
+import org.apache.polaris.core.admin.model.CatalogPrivilege;
 import org.apache.polaris.core.admin.model.CatalogProperties;
 import org.apache.polaris.core.admin.model.CatalogRole;
 import org.apache.polaris.core.admin.model.ExternalCatalog;
@@ -86,6 +88,28 @@ public class ModificationAwarePlannerTest {
             modificationPlanner.planPrincipalSync(List.of(principalWithClientId), List.of(principalWithResetClientId));
 
     Assertions.assertTrue(plan.entitiesNotModified().contains(principalWithClientId));
+  }
+
+  private static final PrincipalRole assignedToPrincipal = new PrincipalRole().name("assigned");
+
+  @Test
+  public void principalRoleAlreadyAssignedToPrincipal() {
+    SynchronizationPlanner modificationPlanner = new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = modificationPlanner.planAssignPrincipalsToPrincipalRolesSync(
+            "principal", List.of(assignedToPrincipal), List.of(assignedToPrincipal));
+
+    Assertions.assertTrue(plan.entitiesNotModified().contains(assignedToPrincipal));
+  }
+
+  @Test
+  public void principalRoleNotAssignedToPrincipal() {
+    SynchronizationPlanner modificationPlanner = new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = modificationPlanner.planAssignPrincipalsToPrincipalRolesSync(
+            "principal", List.of(assignedToPrincipal), List.of());
+
+    Assertions.assertFalse(plan.entitiesNotModified().contains(assignedToPrincipal));
   }
 
   private static final PrincipalRole principalRole = new PrincipalRole().name("principal-role");
@@ -347,5 +371,31 @@ public class ModificationAwarePlannerTest {
             List.of(gcpCatalogGcsServiceAccountChange), List.of(gcpCatalog));
 
     Assertions.assertTrue(plan.entitiesNotModified().contains(gcpCatalogGcsServiceAccountChange));
+  }
+
+  private final static PrincipalRole assignedToCatalogRole = new PrincipalRole().name("assigned");
+
+  @Test
+  public void principalRoleAlreadyAssignedToCatalogRole() {
+    SynchronizationPlanner modificationPlanner = new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = modificationPlanner.planAssignPrincipalRolesToCatalogRolesSync(
+            "catalog",
+            "catalog-role",
+            List.of(assignedToCatalogRole), List.of(assignedToCatalogRole));
+
+    Assertions.assertTrue(plan.entitiesNotModified().contains(assignedToPrincipal));
+  }
+
+  @Test
+  public void principalRoleNotAssignedToCatalogRole() {
+    SynchronizationPlanner modificationPlanner = new ModificationAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = modificationPlanner.planAssignPrincipalRolesToCatalogRolesSync(
+            "catalog",
+            "catalog-role",
+            List.of(assignedToCatalogRole), List.of());
+
+    Assertions.assertFalse(plan.entitiesNotModified().contains(assignedToPrincipal));
   }
 }

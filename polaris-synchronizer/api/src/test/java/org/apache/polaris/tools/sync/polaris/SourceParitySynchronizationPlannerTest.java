@@ -89,6 +89,39 @@ public class SourceParitySynchronizationPlannerTest {
     Assertions.assertTrue(plan.entitiesToRemove().contains(PRINCIPAL_3));
   }
 
+  private static final PrincipalRole ASSIGNED_TO_PRINCIPAL_1 =
+          new PrincipalRole().name("principal-role-1");
+
+  private static final PrincipalRole ASSIGNED_TO_PRINCIPAL_2 =
+          new PrincipalRole().name("principal-role-2");
+
+  private static final PrincipalRole ASSIGNED_TO_PRINCIPAL_3 =
+          new PrincipalRole().name("principal-role-3");
+
+  @Test
+  public void testAssignsNewPrincipalRoleRevokesDroppedPrincipalRoleForPrincipal() {
+    SourceParitySynchronizationPlanner planner = new SourceParitySynchronizationPlanner();
+
+    SynchronizationPlan<PrincipalRole> plan =
+            planner.planAssignPrincipalsToPrincipalRolesSync(
+                    "principal",
+                    List.of(ASSIGNED_TO_PRINCIPAL_1, ASSIGNED_TO_PRINCIPAL_2),
+                    List.of(ASSIGNED_TO_PRINCIPAL_2, ASSIGNED_TO_PRINCIPAL_3));
+
+    Assertions.assertTrue(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_1));
+
+    // special case: no concept of overwriting the assignment of a principal role
+    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_2));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_2));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_2));
+
+    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_3));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_3));
+    Assertions.assertTrue(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_3));
+  }
+
   private static final PrincipalRole PRINCIPAL_ROLE_1 =
       new PrincipalRole().name("principal-role-1");
 
@@ -180,13 +213,13 @@ public class SourceParitySynchronizationPlannerTest {
     Assertions.assertTrue(plan.entitiesToRemove().contains(GRANT_3));
   }
 
-  private static final PrincipalRole ASSIGNED_PRINCIPAL_ROLE_1 =
+  private static final PrincipalRole ASSIGNED_TO_CATALOG_ROLE_1 =
       new PrincipalRole().name("principal-role-1");
 
-  private static final PrincipalRole ASSIGNED_PRINCIPAL_ROLE_2 =
+  private static final PrincipalRole ASSIGNED_TO_CATALOG_ROLE_2 =
       new PrincipalRole().name("principal-role-2");
 
-  private static final PrincipalRole ASSIGNED_PRINCIPAL_ROLE_3 =
+  private static final PrincipalRole ASSIGNED_TO_CATALOG_ROLE_3 =
       new PrincipalRole().name("principal-role-3");
 
   @Test
@@ -197,21 +230,21 @@ public class SourceParitySynchronizationPlannerTest {
         planner.planAssignPrincipalRolesToCatalogRolesSync(
             "catalog",
             "catalogRole",
-            List.of(ASSIGNED_PRINCIPAL_ROLE_1, ASSIGNED_PRINCIPAL_ROLE_2),
-            List.of(ASSIGNED_PRINCIPAL_ROLE_2, ASSIGNED_PRINCIPAL_ROLE_3));
+            List.of(ASSIGNED_TO_PRINCIPAL_1, ASSIGNED_TO_PRINCIPAL_2),
+            List.of(ASSIGNED_TO_PRINCIPAL_2, ASSIGNED_TO_PRINCIPAL_3));
 
-    Assertions.assertTrue(plan.entitiesToCreate().contains(ASSIGNED_PRINCIPAL_ROLE_1));
-    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_PRINCIPAL_ROLE_1));
-    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_PRINCIPAL_ROLE_1));
+    Assertions.assertTrue(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_1));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_1));
 
     // special case: no concept of overwriting the assignment of a principal role
-    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_PRINCIPAL_ROLE_2));
-    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_PRINCIPAL_ROLE_2));
-    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_PRINCIPAL_ROLE_2));
+    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_2));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_2));
+    Assertions.assertFalse(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_2));
 
-    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_PRINCIPAL_ROLE_3));
-    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_PRINCIPAL_ROLE_3));
-    Assertions.assertTrue(plan.entitiesToRemove().contains(ASSIGNED_PRINCIPAL_ROLE_3));
+    Assertions.assertFalse(plan.entitiesToCreate().contains(ASSIGNED_TO_PRINCIPAL_3));
+    Assertions.assertFalse(plan.entitiesToOverwrite().contains(ASSIGNED_TO_PRINCIPAL_3));
+    Assertions.assertTrue(plan.entitiesToRemove().contains(ASSIGNED_TO_PRINCIPAL_3));
   }
 
   private static final Namespace NS_1 = Namespace.of("ns1");

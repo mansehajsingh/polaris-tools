@@ -70,6 +70,30 @@ public class AccessControlAwarePlannerTest {
     Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(rootPrincipalTarget));
   }
 
+  @Test
+  public void filtersPrincipalAssignmentToOmnipotentPrincipalRole() {
+    SynchronizationPlanner accessControlAwarePlanner
+            = new AccessControlAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = accessControlAwarePlanner.planAssignPrincipalsToPrincipalRolesSync(
+            "principal", List.of(omnipotentPrincipalRoleSource), List.of(omnipotentPrincipalRoleTarget));
+
+    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalRoleSource));
+    Assertions.assertTrue(plan.entitiesToSkip().contains(omnipotentPrincipalRoleTarget));
+  }
+
+  @Test
+  public void filtersAssignmentToServiceAdmin() {
+    SynchronizationPlanner accessControlAwarePlanner
+            = new AccessControlAwarePlanner(new NoOpSyncPlanner());
+
+    SynchronizationPlan<PrincipalRole> plan = accessControlAwarePlanner.planAssignPrincipalsToPrincipalRolesSync(
+            "principal", List.of(serviceAdminSource), List.of(serviceAdminTarget));
+
+    Assertions.assertTrue(plan.entitiesToSkip().contains(serviceAdminSource));
+    Assertions.assertTrue(plan.entitiesToSkip().contains(serviceAdminTarget));
+  }
+
   private static final PrincipalRole omnipotentPrincipalRoleSource =
       new PrincipalRole()
           .name("omnipotent-principal-XXXXX")
