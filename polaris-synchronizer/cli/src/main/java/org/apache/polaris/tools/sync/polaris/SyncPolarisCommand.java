@@ -30,6 +30,7 @@ import org.apache.polaris.tools.sync.polaris.options.SourcePolarisOptions;
 import org.apache.polaris.tools.sync.polaris.options.TargetOmnipotentPrincipal;
 import org.apache.polaris.tools.sync.polaris.options.TargetPolarisOptions;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
+import org.apache.polaris.tools.sync.polaris.planning.CatalogFilterPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
@@ -88,13 +89,23 @@ public class SyncPolarisCommand implements Callable<Integer> {
   )
   private boolean shouldSyncPrincipals;
 
+  @CommandLine.Option(
+          names = {"--catalog-name-regex"},
+          description = "Filter catalogs by name matching the provided regular expression."
+  )
+  private String catalogNameRegex;
+
   @Override
   public Integer call() throws Exception {
-    SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
-    SynchronizationPlanner modificationAwareSourceParityPlanner =
-        new ModificationAwarePlanner(sourceParityPlanner);
-    SynchronizationPlanner accessControlAwarePlanner =
-        new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
+    SynchronizationPlanner planner = new SourceParitySynchronizationPlanner();
+
+    planner = new ModificationAwarePlanner(planner);
+
+    if (catalogNameRegex != null) {
+      planner = new CatalogFilterPlanner(catalogNameRegex, planner);
+    }
+
+    planner = new AccessControlAwarePlanner(planner);
 
     PolarisService source = sourcePolarisOptions.buildService();
     PolarisService target = targetPolarisOptions.buildService();
@@ -129,7 +140,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
     PolarisSynchronizer synchronizer =
         new PolarisSynchronizer(
             consoleLog,
-            accessControlAwarePlanner,
+            planner,
             sourceOmnipotentPrincipal,
             targetOmniPotentPrincipal,
             source,

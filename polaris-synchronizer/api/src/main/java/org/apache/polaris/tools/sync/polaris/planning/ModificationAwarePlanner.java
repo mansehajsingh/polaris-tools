@@ -40,6 +40,7 @@ import org.apache.polaris.core.admin.model.GrantResource;
 import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
+import org.apache.polaris.tools.sync.polaris.planning.util.IdentifierIntersectionFilterUtil;
 import org.eclipse.collections.impl.block.procedure.CollectIfProcedure;
 
 /** Planner that checks for modifications and plans to skip entities that have not been modified. */
@@ -222,19 +223,20 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
 
   @Override
   public SynchronizationPlan<Principal> planPrincipalSync(List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
-    FilteredNotModifiedEntityResult<Principal> result = filterOutEntitiesNotModified(
-            principalsOnSource,
-            principalsOnTarget,
-            Principal::getName,
-            (p1, p2) -> areSame(p1, p2, PRINCIPAL_KEYS_TO_IGNORE)
-    );
+    IdentifierIntersectionFilterUtil.FilterResult<Principal> result = IdentifierIntersectionFilterUtil
+            .filterOnCondition(
+                    principalsOnSource,
+                    principalsOnTarget,
+                    Principal::getName,
+                    (p1, p2) -> !areSame(p1, p2, PRINCIPAL_KEYS_TO_IGNORE)
+            );
 
     SynchronizationPlan<Principal> delegatedPlan = delegate.planPrincipalSync(
-            result.filteredEntitiesSource(),
-            result.filteredEntitiesTarget()
+            result.sourceEntitiesFiltered(),
+            result.targetEntitiesFiltered()
     );
 
-    for (Principal principal : result.notModifiedEntities()) {
+    for (Principal principal : result.sourceEntitiesFilteredOut()) {
       delegatedPlan.skipEntityNotModified(principal);
     }
 
@@ -247,20 +249,23 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
           List<PrincipalRole> assignedPrincipalRolesOnSource,
           List<PrincipalRole> assignedPrincipalRolesOnTarget
   ) {
-    FilteredNotModifiedEntityResult<PrincipalRole> result = filterOutEntitiesNotModified(
-            assignedPrincipalRolesOnSource,
-            assignedPrincipalRolesOnTarget,
-            PrincipalRole::getName,
-            this::areSame
-    );
+    IdentifierIntersectionFilterUtil.FilterResult<PrincipalRole> result = IdentifierIntersectionFilterUtil
+            .filterOnCondition(
+                    assignedPrincipalRolesOnSource,
+                    assignedPrincipalRolesOnTarget,
+                    PrincipalRole::getName,
+                    // if a principal role with the same name is assigned on both the source and target,
+                    // just filter it out since we do not need to reassign it
+                    (pr1, pr2) -> !pr1.getName().equals(pr2.getName())
+            );
 
     SynchronizationPlan<PrincipalRole> delegatedPlan =
             delegate.planAssignPrincipalsToPrincipalRolesSync(
                     principalName,
-                    result.filteredEntitiesSource(),
-                    result.filteredEntitiesTarget());
+                    result.sourceEntitiesFiltered(),
+                    result.targetEntitiesFilteredOut());
 
-    for (PrincipalRole principalRole : result.notModifiedEntities()) {
+    for (PrincipalRole principalRole : result.sourceEntitiesFilteredOut()) {
       delegatedPlan.skipEntityNotModified(principalRole);
     }
 
@@ -270,6 +275,7 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
   @Override
   public SynchronizationPlan<PrincipalRole> planPrincipalRoleSync(
       List<PrincipalRole> principalRolesOnSource, List<PrincipalRole> principalRolesOnTarget) {
+    
     FilteredNotModifiedEntityResult<PrincipalRole> result = filterOutEntitiesNotModified(
       principalRolesOnSource,
       principalRolesOnTarget,
