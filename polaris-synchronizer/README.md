@@ -145,7 +145,6 @@ diff between the source and target Polaris instances. This can be achieved using
 using client credentials.
 ```
 java -jar cli/build/libs/polaris-synchronizer-cli.jar sync-polaris \
---source-type API \
 --source-properties base-url=http://localhost:8181 \
 --source-properties client-id=root \
 --source-properties client-secret=<client_secret> \
@@ -154,7 +153,6 @@ java -jar cli/build/libs/polaris-synchronizer-cli.jar sync-polaris \
 --source-properties omnipotent-principal-name=omnipotent-principal-XXXXX \
 --source-properties omnipotent-principal-client-id=589550e8b23d271e \
 --source-properties omnipotent-principal-client-secret=<omni_client_secret> \
---target-type API \
 --target-properties base-url=http://localhost:5858 \
 --target-properties client-id=root \
 --target-properties client-secret=<client_secret> \

@@ -58,7 +58,11 @@ public class SyncPolarisCommand implements Callable<Integer> {
                   "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
                   "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
                   "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
-                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)"
+                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
+                  "\nOmnipotent Principal Properties:" +
+                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
+                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the source Polaris"
   )
   private Map<String, String> sourceProperties;
 
@@ -73,7 +77,11 @@ public class SyncPolarisCommand implements Callable<Integer> {
                   "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
                   "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
                   "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
-                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)"
+                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
+                  "\nOmnipotent Principal Properties:" +
+                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
+                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the target Polaris"
   )
   private Map<String, String> targetProperties;
 
