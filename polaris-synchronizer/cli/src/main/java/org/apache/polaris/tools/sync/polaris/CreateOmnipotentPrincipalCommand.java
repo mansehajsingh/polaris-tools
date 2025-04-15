@@ -20,6 +20,7 @@ package org.apache.polaris.tools.sync.polaris;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -31,7 +32,8 @@ import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
-import org.apache.polaris.tools.sync.polaris.options.PolarisOptions;
+import org.apache.polaris.tools.sync.polaris.service.PolarisService;
+import org.apache.polaris.tools.sync.polaris.service.impl.PolarisApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -51,8 +53,11 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
 
   private final Logger consoleLog = LoggerFactory.getLogger("console-log");
 
-  @CommandLine.ArgGroup(exclusive = false, multiplicity = "1", heading = "Polaris options: %n")
-  private PolarisOptions options;
+  @CommandLine.Option(
+          names = {"--polaris-api-connection-properties"},
+          description = "The connection properties to connect to the Polaris API."
+  )
+  private Map<String, String> polarisApiConnectionProperties;
 
   @CommandLine.Option(
       names = {"--replace"},
@@ -79,8 +84,17 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
 
   @Override
   public Integer call() throws Exception {
-    PolarisService polaris = options.buildService();
-    AccessControlService accessControlService = new AccessControlService(polaris);
+    polarisApiConnectionProperties.putIfAbsent("iceberg-write-access", String.valueOf(withWriteAccess));
+
+    PolarisService polaris = PolarisServiceFactory.createPolarisService(
+            PolarisServiceFactory.ServiceType.API,
+            withWriteAccess
+                    ? PolarisServiceFactory.EndpointType.TARGET
+                    : PolarisServiceFactory.EndpointType.SOURCE,
+            polarisApiConnectionProperties
+    );
+
+    AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
 
     PrincipalWithCredentials principalWithCredentials;
 
@@ -136,9 +150,10 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
                       "Failed to setup omnipotent catalog role for catalog {} with {} access. - {}/{}",
                       catalog.getName(),
                       permissionLevel,
-                      completedCatalogSetups.getAndIncrement(),
+                      completedCatalogSetups.incrementAndGet(),
                       catalogs.size(),
                       e);
+                  return;
                 }
 
                 consoleLog.info(

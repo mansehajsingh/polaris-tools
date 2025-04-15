@@ -21,18 +21,15 @@ package org.apache.polaris.tools.sync.polaris;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.Callable;
-import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagManager;
-import org.apache.polaris.tools.sync.polaris.options.SourceOmniPotentPrincipalOptions;
-import org.apache.polaris.tools.sync.polaris.options.SourcePolarisOptions;
-import org.apache.polaris.tools.sync.polaris.options.TargetOmnipotentPrincipal;
-import org.apache.polaris.tools.sync.polaris.options.TargetPolarisOptions;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
+import org.apache.polaris.tools.sync.polaris.service.PolarisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -50,29 +47,33 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
   private final Logger consoleLog = LoggerFactory.getLogger("console-log");
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Source Polaris options: %n")
-  private SourcePolarisOptions sourcePolarisOptions;
+  @CommandLine.Option(
+          names = {"--source-type"},
+          required = true,
+          description = "The type of the Polaris entity source. One of { API }"
+  )
+  private PolarisServiceFactory.ServiceType sourceType;
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Target Polaris options: %n")
-  private TargetPolarisOptions targetPolarisOptions;
+  @CommandLine.Option(
+          names = {"--source-properties"},
+          required = true,
+          description = "The properties to initialize the Polaris entity source."
+  )
+  private Map<String, String> sourceProperties;
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Source Polaris Omnipotent Principal Options: %n")
-  private SourceOmniPotentPrincipalOptions sourceOmniPotentPrincipalOptions;
+  @CommandLine.Option(
+          names = {"--target-type"},
+          required = true,
+          description = "The type of the Polaris entity target. One of { API }"
+  )
+  private PolarisServiceFactory.ServiceType targetType;
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Target Polaris Omnipotent Principal Options: %n")
-  private TargetOmnipotentPrincipal targetOmniPotentPrincipalOptions;
+  @CommandLine.Option(
+          names = {"--target-properties"},
+          required = true,
+          description = "The properties to initialize the Polaris entity target."
+  )
+  private Map<String, String> targetProperties;
 
   @CommandLine.Option(
       names = {"--etag-file"},
@@ -91,18 +92,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
-    SynchronizationPlanner modificationAwareSourceParityPlanner =
-        new ModificationAwarePlanner(sourceParityPlanner);
-    SynchronizationPlanner accessControlAwarePlanner =
-        new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
+    SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceParityPlanner);
+    SynchronizationPlanner accessControlAwarePlanner = new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
 
-    PolarisService source = sourcePolarisOptions.buildService();
-    PolarisService target = targetPolarisOptions.buildService();
 
-    PrincipalWithCredentials sourceOmnipotentPrincipal =
-        sourceOmniPotentPrincipalOptions.buildPrincipalWithCredentials();
-    PrincipalWithCredentials targetOmniPotentPrincipal =
-        targetOmniPotentPrincipalOptions.buildPrincipalWithCredentials();
+    PolarisService source = PolarisServiceFactory.createPolarisService(
+            sourceType, PolarisServiceFactory.EndpointType.SOURCE, sourceProperties);
+    PolarisService target = PolarisServiceFactory.createPolarisService(
+            sourceType, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
 
     ETagManager etagService;
 
@@ -130,8 +127,6 @@ public class SyncPolarisCommand implements Callable<Integer> {
         new PolarisSynchronizer(
             consoleLog,
             accessControlAwarePlanner,
-            sourceOmnipotentPrincipal,
-            targetOmniPotentPrincipal,
             source,
             target,
             etagService);

@@ -37,7 +37,7 @@ import org.apache.polaris.core.admin.model.GrantResource;
 import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
-import org.apache.polaris.tools.sync.polaris.PolarisService;
+import org.apache.polaris.tools.sync.polaris.service.impl.PolarisApiService;
 
 /**
  * Service class to facilitate the access control needs of the synchronization. This involves
@@ -46,9 +46,9 @@ import org.apache.polaris.tools.sync.polaris.PolarisService;
  */
 public class AccessControlService {
 
-  private final PolarisService polaris;
+  private final PolarisApiService polaris;
 
-  public AccessControlService(PolarisService polaris) {
+  public AccessControlService(PolarisApiService polaris) {
     this.polaris = polaris;
   }
 
@@ -73,7 +73,7 @@ public class AccessControlService {
           && principal.getProperties().containsKey(OMNIPOTENCE_PROPERTY)) {
         if (replace) {
           // drop existing omnipotent principal in preparation for replacement
-          polaris.removePrincipal(principal.getName());
+          polaris.dropPrincipal(principal.getName());
         } else {
           // we cannot create another omnipotent principal and cannot replace the existing, fail
           throw new IllegalStateException(
@@ -86,7 +86,7 @@ public class AccessControlService {
     }
 
     // existing principal with identifying property does not exist, create a new one
-    return polaris.createPrincipal(omnipotentPrincipalPrototype, false);
+    return polaris.createPrincipal(omnipotentPrincipalPrototype);
   }
 
   /**
@@ -97,7 +97,7 @@ public class AccessControlService {
    */
   public PrincipalRole getOmnipotentPrincipalRoleForPrincipal(String principalName) {
     List<PrincipalRole> principalRolesAssigned =
-        polaris.listPrincipalRolesAssignedForPrincipal(principalName);
+        polaris.listPrincipalRolesAssigned(principalName);
 
     return principalRolesAssigned.stream()
         .filter(
@@ -137,7 +137,7 @@ public class AccessControlService {
           && principalRole.getProperties().containsKey(OMNIPOTENCE_PROPERTY)) {
         // replace existing principal role if exists
         if (replace) {
-          polaris.removePrincipalRole(principalRole.getName());
+          polaris.dropPrincipalRole(principalRole.getName());
         } else {
           throw new IllegalStateException(
               "Not permitted to replace existing omnipotent principal role, but omnipotent "
@@ -148,9 +148,8 @@ public class AccessControlService {
       }
     }
 
-    polaris.createPrincipalRole(omnipotentPrincipalRole, false);
-    polaris.assignPrincipalRoleToPrincipal(
-        omnipotentPrincipal.getPrincipal().getName(), omnipotentPrincipalRole.getName());
+    polaris.createPrincipalRole(omnipotentPrincipalRole);
+    polaris.assignPrincipalRole(omnipotentPrincipal.getPrincipal().getName(), omnipotentPrincipalRole.getName());
     return omnipotentPrincipalRole;
   }
 
@@ -172,7 +171,7 @@ public class AccessControlService {
       if (catalogRole.getProperties() != null
           && catalogRole.getProperties().containsKey(OMNIPOTENCE_PROPERTY)) {
         if (replace) {
-          polaris.removeCatalogRole(catalogName, catalogRole.getName());
+          polaris.dropCatalogRole(catalogName, catalogRole.getName());
         } else {
           throw new IllegalStateException(
               "Not permitted to replace existing omnipotent catalog role for catalog "
@@ -189,9 +188,8 @@ public class AccessControlService {
             .name(omnipotentPrincipalRole.getName())
             .putPropertiesItem(OMNIPOTENCE_PROPERTY, "");
 
-    polaris.createCatalogRole(catalogName, omnipotentCatalogRole, false /* overwrite */);
-    polaris.assignCatalogRole(
-        omnipotentPrincipalRole.getName(), catalogName, omnipotentCatalogRole.getName());
+    polaris.createCatalogRole(catalogName, omnipotentCatalogRole);
+    polaris.assignCatalogRole(omnipotentPrincipalRole.getName(), catalogName, omnipotentCatalogRole.getName());
     return omnipotentCatalogRole;
   }
 
