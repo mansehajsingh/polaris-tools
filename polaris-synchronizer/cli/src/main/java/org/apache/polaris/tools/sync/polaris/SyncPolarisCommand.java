@@ -21,18 +21,15 @@ package org.apache.polaris.tools.sync.polaris;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 import java.util.concurrent.Callable;
-import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagManager;
-import org.apache.polaris.tools.sync.polaris.options.SourceOmniPotentPrincipalOptions;
-import org.apache.polaris.tools.sync.polaris.options.SourcePolarisOptions;
-import org.apache.polaris.tools.sync.polaris.options.TargetOmnipotentPrincipal;
-import org.apache.polaris.tools.sync.polaris.options.TargetPolarisOptions;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
+import org.apache.polaris.tools.sync.polaris.service.PolarisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -50,29 +47,43 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
   private final Logger consoleLog = LoggerFactory.getLogger("console-log");
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Source Polaris options: %n")
-  private SourcePolarisOptions sourcePolarisOptions;
+  @CommandLine.Option(
+          names = {"--source-properties"},
+          required = true,
+          description = "Properties to initialize Polaris entity source." +
+                  "\nProperties:" +
+                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
+                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
+                  "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
+                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
+                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
+                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
+                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
+                  "\nOmnipotent Principal Properties:" +
+                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
+                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the source Polaris"
+  )
+  private Map<String, String> sourceProperties;
 
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Target Polaris options: %n")
-  private TargetPolarisOptions targetPolarisOptions;
-
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Source Polaris Omnipotent Principal Options: %n")
-  private SourceOmniPotentPrincipalOptions sourceOmniPotentPrincipalOptions;
-
-  @CommandLine.ArgGroup(
-      exclusive = false,
-      multiplicity = "1",
-      heading = "Target Polaris Omnipotent Principal Options: %n")
-  private TargetOmnipotentPrincipal targetOmniPotentPrincipalOptions;
+  @CommandLine.Option(
+          names = {"--target-properties"},
+          required = true,
+          description = "Properties to initialize Polaris entity target." +
+                  "\nProperties:" +
+                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
+                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
+                  "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
+                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
+                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
+                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
+                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
+                  "\nOmnipotent Principal Properties:" +
+                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
+                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the target Polaris"
+  )
+  private Map<String, String> targetProperties;
 
   @CommandLine.Option(
       names = {"--etag-file"},
@@ -91,18 +102,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
-    SynchronizationPlanner modificationAwareSourceParityPlanner =
-        new ModificationAwarePlanner(sourceParityPlanner);
-    SynchronizationPlanner accessControlAwarePlanner =
-        new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
+    SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceParityPlanner);
+    SynchronizationPlanner accessControlAwarePlanner = new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
 
-    PolarisService source = sourcePolarisOptions.buildService();
-    PolarisService target = targetPolarisOptions.buildService();
 
-    PrincipalWithCredentials sourceOmnipotentPrincipal =
-        sourceOmniPotentPrincipalOptions.buildPrincipalWithCredentials();
-    PrincipalWithCredentials targetOmniPotentPrincipal =
-        targetOmniPotentPrincipalOptions.buildPrincipalWithCredentials();
+    PolarisService source = PolarisServiceFactory.createPolarisService(
+            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.SOURCE, sourceProperties);
+    PolarisService target = PolarisServiceFactory.createPolarisService(
+            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
 
     ETagManager etagService;
 
@@ -130,8 +137,6 @@ public class SyncPolarisCommand implements Callable<Integer> {
         new PolarisSynchronizer(
             consoleLog,
             accessControlAwarePlanner,
-            sourceOmnipotentPrincipal,
-            targetOmniPotentPrincipal,
             source,
             target,
             etagService);

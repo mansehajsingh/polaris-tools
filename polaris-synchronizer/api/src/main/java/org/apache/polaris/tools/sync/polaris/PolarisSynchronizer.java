@@ -25,7 +25,6 @@ import java.util.Set;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
-import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.CatalogRole;
@@ -33,13 +32,14 @@ import org.apache.polaris.core.admin.model.GrantResource;
 import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
-import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
 import org.apache.polaris.tools.sync.polaris.catalog.BaseTableWithETag;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.catalog.MetadataNotModifiedException;
-import org.apache.polaris.tools.sync.polaris.catalog.PolarisCatalog;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
+import org.apache.polaris.tools.sync.polaris.service.IcebergCatalogService;
+import org.apache.polaris.tools.sync.polaris.service.PolarisService;
+import org.apache.polaris.tools.sync.polaris.service.impl.PolarisIcebergCatalogService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,44 +57,19 @@ public class PolarisSynchronizer {
 
   private final PolarisService target;
 
-  private final PrincipalWithCredentials sourceOmnipotentPrincipal;
-
-  private final PrincipalWithCredentials targetOmnipotentPrincipal;
-
-  private final PrincipalRole sourceOmnipotentPrincipalRole;
-
-  private final PrincipalRole targetOmnipotentPrincipalRole;
-
-  private final AccessControlService sourceAccessControlService;
-
-  private final AccessControlService targetAccessControlService;
-
   private final ETagManager etagManager;
 
   public PolarisSynchronizer(
       Logger clientLogger,
       SynchronizationPlanner synchronizationPlanner,
-      PrincipalWithCredentials sourceOmnipotentPrincipal,
-      PrincipalWithCredentials targetOmnipotentPrincipal,
       PolarisService source,
       PolarisService target,
       ETagManager etagManager) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.syncPlanner = synchronizationPlanner;
-    this.sourceOmnipotentPrincipal = sourceOmnipotentPrincipal;
-    this.targetOmnipotentPrincipal = targetOmnipotentPrincipal;
     this.source = source;
     this.target = target;
-    this.sourceAccessControlService = new AccessControlService(source);
-    this.targetAccessControlService = new AccessControlService(target);
-
-    this.sourceOmnipotentPrincipalRole =
-        sourceAccessControlService.getOmnipotentPrincipalRoleForPrincipal(
-            sourceOmnipotentPrincipal.getPrincipal().getName());
-    this.targetOmnipotentPrincipalRole =
-        targetAccessControlService.getOmnipotentPrincipalRoleForPrincipal(
-            targetOmnipotentPrincipal.getPrincipal().getName());
     this.etagManager = etagManager;
   }
 
@@ -154,7 +129,7 @@ public class PolarisSynchronizer {
 
     for (Principal principal : principalSyncPlan.entitiesToCreate()) {
       try {
-        PrincipalWithCredentials createdPrincipal = target.createPrincipal(principal, false /* overwrite */);
+        PrincipalWithCredentials createdPrincipal = target.createPrincipal(principal);
         clientLogger.info("Created principal {} on target. Target credentials: {}:{} - {}/{}",
                 principal.getName(),
                 createdPrincipal.getCredentials().getClientId(),
@@ -170,7 +145,8 @@ public class PolarisSynchronizer {
 
     for (Principal principal : principalSyncPlan.entitiesToOverwrite()) {
       try {
-        PrincipalWithCredentials overwrittenPrincipal = target.createPrincipal(principal, true /* overwrite */);
+        target.dropPrincipal(principal.getName());
+        PrincipalWithCredentials overwrittenPrincipal = target.createPrincipal(principal);
         clientLogger.info("Overwrote principal {} on target. Target credentials: {}:{} - {}/{}",
                 principal.getName(),
                 overwrittenPrincipal.getCredentials().getClientId(),
@@ -186,7 +162,7 @@ public class PolarisSynchronizer {
 
     for (Principal principal : principalSyncPlan.entitiesToRemove()) {
       try {
-        target.removePrincipal(principal.getName());
+        target.dropPrincipal(principal.getName());
         clientLogger.info("Removed principal {} on target. - {}/{}",
                 principal.getName(), ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
@@ -208,7 +184,7 @@ public class PolarisSynchronizer {
     List<PrincipalRole> assignedPrincipalRolesSource;
 
     try {
-      assignedPrincipalRolesSource = source.listPrincipalRolesAssignedForPrincipal(principalName);
+      assignedPrincipalRolesSource = source.listPrincipalRolesAssigned(principalName);
       clientLogger.info("Listed {} assigned principal-roles for principal {} from source.",
               assignedPrincipalRolesSource.size(), principalName);
     } catch (Exception e) {
@@ -219,7 +195,7 @@ public class PolarisSynchronizer {
     List<PrincipalRole> assignedPrincipalRolesTarget;
 
     try {
-      assignedPrincipalRolesTarget = target.listPrincipalRolesAssignedForPrincipal(principalName);
+      assignedPrincipalRolesTarget = target.listPrincipalRolesAssigned(principalName);
       clientLogger.info("Listed {} assigned principal-roles for principal {} from target.",
               assignedPrincipalRolesTarget.size(), principalName);
     } catch (Exception e) {
@@ -251,7 +227,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToCreate()) {
       try {
-        target.assignPrincipalRoleToPrincipal(principalName, principalRole.getName());
+        target.assignPrincipalRole(principalName, principalRole.getName());
         clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
@@ -262,7 +238,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToOverwrite()) {
       try {
-        target.assignPrincipalRoleToPrincipal(principalName, principalRole.getName());
+        target.assignPrincipalRole(principalName, principalRole.getName());
         clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
@@ -273,7 +249,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToRemove()) {
       try {
-        target.revokePrincipalRoleFromPrincipal(principalName, principalRole.getName());
+        target.revokePrincipalRole(principalName, principalRole.getName());
         clientLogger.info("Revoked principal-role {} from principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
@@ -327,7 +303,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : principalRoleSyncPlan.entitiesToCreate()) {
       try {
-        target.createPrincipalRole(principalRole, false);
+        target.createPrincipalRole(principalRole);
         clientLogger.info(
             "Created principal-role {} on target. - {}/{}",
             principalRole.getName(),
@@ -345,7 +321,8 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : principalRoleSyncPlan.entitiesToOverwrite()) {
       try {
-        target.createPrincipalRole(principalRole, true);
+        target.dropPrincipalRole(principalRole.getName());
+        target.createPrincipalRole(principalRole);
         clientLogger.info(
             "Overwrote principal-role {} on target. - {}/{}",
             principalRole.getName(),
@@ -363,7 +340,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : principalRoleSyncPlan.entitiesToRemove()) {
       try {
-        target.removePrincipalRole(principalRole.getName());
+        target.dropPrincipalRole(principalRole.getName());
         clientLogger.info(
             "Removed principal-role {} on target. - {}/{}",
             principalRole.getName(),
@@ -454,7 +431,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToCreate()) {
       try {
-        target.assignCatalogRoleToPrincipalRole(
+        target.assignCatalogRole(
             principalRole.getName(), catalogName, catalogRoleName);
         clientLogger.info(
             "Assigned principal-role {} to catalog-role {} in catalog {}. - {}/{}",
@@ -477,7 +454,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToOverwrite()) {
       try {
-        target.assignCatalogRoleToPrincipalRole(
+        target.assignCatalogRole(
             principalRole.getName(), catalogName, catalogRoleName);
         clientLogger.info(
             "Assigned principal-role {} to catalog-role {} in catalog {}. - {}/{}",
@@ -500,7 +477,7 @@ public class PolarisSynchronizer {
 
     for (PrincipalRole principalRole : assignedPrincipalRoleSyncPlan.entitiesToRemove()) {
       try {
-        target.removeCatalogRoleFromPrincipalRole(
+        target.revokeCatalogRole(
             principalRole.getName(), catalogName, catalogRoleName);
         clientLogger.info(
             "Revoked principal-role {} from catalog-role {} in catalog {}. - {}/{}",
@@ -588,8 +565,8 @@ public class PolarisSynchronizer {
 
     for (Catalog catalog : catalogSyncPlan.entitiesToOverwrite()) {
       try {
-        setupOmnipotentCatalogRoleIfNotExistsTarget(catalog.getName());
-        target.overwriteCatalog(catalog, targetOmnipotentPrincipal);
+        target.dropCatalogCascade(catalog.getName());
+        target.createCatalog(catalog);
         clientLogger.info(
             "Overwrote catalog {}. - {}/{}",
             catalog.getName(),
@@ -607,8 +584,7 @@ public class PolarisSynchronizer {
 
     for (Catalog catalog : catalogSyncPlan.entitiesToRemove()) {
       try {
-        setupOmnipotentCatalogRoleIfNotExistsTarget(catalog.getName());
-        target.removeCatalogCascade(catalog.getName(), targetOmnipotentPrincipal);
+        target.dropCatalogCascade(catalog.getName());
         clientLogger.info(
             "Removed catalog {}. - {}/{}",
             catalog.getName(),
@@ -627,10 +603,10 @@ public class PolarisSynchronizer {
     for (Catalog catalog : catalogSyncPlan.entitiesToSyncChildren()) {
       syncCatalogRoles(catalog.getName());
 
-      org.apache.iceberg.catalog.Catalog sourceIcebergCatalog;
+      IcebergCatalogService sourceIcebergCatalogService;
 
       try {
-        sourceIcebergCatalog = initializeIcebergCatalogSource(catalog.getName());
+        sourceIcebergCatalogService = source.initializeIcebergCatalogService(catalog.getName());
         clientLogger.info(
             "Initialized Iceberg REST catalog for Polaris catalog {} on source.",
             catalog.getName());
@@ -642,10 +618,10 @@ public class PolarisSynchronizer {
         continue;
       }
 
-      org.apache.iceberg.catalog.Catalog targetIcebergCatalog;
+      IcebergCatalogService targetIcebergCatalogService;
 
       try {
-        targetIcebergCatalog = initializeIcebergCatalogTarget(catalog.getName());
+        targetIcebergCatalogService = target.initializeIcebergCatalogService(catalog.getName());
         clientLogger.info(
             "Initialized Iceberg REST catalog for Polaris catalog {} on target.",
             catalog.getName());
@@ -658,7 +634,7 @@ public class PolarisSynchronizer {
       }
 
       syncNamespaces(
-          catalog.getName(), Namespace.empty(), sourceIcebergCatalog, targetIcebergCatalog);
+          catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
     }
   }
 
@@ -729,7 +705,7 @@ public class PolarisSynchronizer {
 
     for (CatalogRole catalogRole : catalogRoleSyncPlan.entitiesToCreate()) {
       try {
-        target.createCatalogRole(catalogName, catalogRole, false);
+        target.createCatalogRole(catalogName, catalogRole);
         clientLogger.info(
             "Created catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -749,7 +725,8 @@ public class PolarisSynchronizer {
 
     for (CatalogRole catalogRole : catalogRoleSyncPlan.entitiesToOverwrite()) {
       try {
-        target.createCatalogRole(catalogName, catalogRole, true);
+        target.dropCatalogRole(catalogName, catalogRole.getName());
+        target.createCatalogRole(catalogName, catalogRole);
         clientLogger.info(
             "Overwrote catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -769,7 +746,7 @@ public class PolarisSynchronizer {
 
     for (CatalogRole catalogRole : catalogRoleSyncPlan.entitiesToRemove()) {
       try {
-        target.removeCatalogRole(catalogName, catalogRole.getName());
+        target.dropCatalogRole(catalogName, catalogRole.getName());
         clientLogger.info(
             "Removed catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -930,208 +907,158 @@ public class PolarisSynchronizer {
   }
 
   /**
-   * Setup an omnipotent principal for the provided catalog on the target Polaris instance.
-   *
-   * @param catalogName
-   */
-  private void setupOmnipotentCatalogRoleIfNotExistsTarget(String catalogName) {
-    if (!this.targetAccessControlService.omnipotentCatalogRoleExists(catalogName)) {
-      clientLogger.info(
-          "No omnipotent catalog-role exists for catalog {} on target. Going to set one up.",
-          catalogName);
-
-      targetAccessControlService.setupOmnipotentRoleForCatalog(
-          catalogName, targetOmnipotentPrincipalRole, false, true);
-
-      clientLogger.info("Setup omnipotent catalog-role for catalog {} on target.", catalogName);
-    }
-  }
-
-  /**
-   * Setup an omnipotent principal for the provided catalog on the target Polaris instance.
-   *
-   * @param catalogName
-   */
-  private void setupOmnipotentCatalogRoleIfNotExistsSource(String catalogName) {
-    if (!this.sourceAccessControlService.omnipotentCatalogRoleExists(catalogName)) {
-      clientLogger.info(
-          "No omnipotent catalog-role exists for catalog {} on source. Going to set one up.",
-          catalogName);
-
-      sourceAccessControlService.setupOmnipotentRoleForCatalog(
-          catalogName, sourceOmnipotentPrincipalRole, false, false);
-
-      clientLogger.info("Setup omnipotent catalog-role for catalog {} on source.", catalogName);
-    }
-  }
-
-  public org.apache.iceberg.catalog.Catalog initializeIcebergCatalogSource(String catalogName) {
-    setupOmnipotentCatalogRoleIfNotExistsSource(catalogName);
-    return source.initializeCatalog(catalogName, sourceOmnipotentPrincipal);
-  }
-
-  public org.apache.iceberg.catalog.Catalog initializeIcebergCatalogTarget(String catalogName) {
-    setupOmnipotentCatalogRoleIfNotExistsTarget(catalogName);
-    return target.initializeCatalog(catalogName, targetOmnipotentPrincipal);
-  }
-
-  /**
    * Sync namespaces contained within a parent namespace.
    *
    * @param catalogName
    * @param parentNamespace
-   * @param sourceIcebergCatalog
-   * @param targetIcebergCatalog
+   * @param sourceIcebergCatalogService
+   * @param targetIcebergCatalogService
    */
   public void syncNamespaces(
       String catalogName,
       Namespace parentNamespace,
-      org.apache.iceberg.catalog.Catalog sourceIcebergCatalog,
-      org.apache.iceberg.catalog.Catalog targetIcebergCatalog) {
-    // no namespaces to sync if catalog does not implement SupportsNamespaces
-    if (sourceIcebergCatalog instanceof SupportsNamespaces sourceNamespaceCatalog
-        && targetIcebergCatalog instanceof SupportsNamespaces targetNamespaceCatalog) {
+      IcebergCatalogService sourceIcebergCatalogService,
+      IcebergCatalogService targetIcebergCatalogService) {
       List<Namespace> namespacesSource;
 
+    try {
+      namespacesSource = sourceIcebergCatalogService.listNamespaces(parentNamespace);
+      clientLogger.info(
+          "Listed {} namespaces in namespace {} for catalog {} from source.",
+          namespacesSource.size(),
+          parentNamespace,
+          catalogName);
+    } catch (Exception e) {
+      clientLogger.error(
+          "Failed to list namespaces in namespace {} for catalog {} from source.",
+          parentNamespace,
+          catalogName,
+          e);
+      return;
+    }
+
+    List<Namespace> namespacesTarget;
+
+    try {
+      namespacesTarget = targetIcebergCatalogService.listNamespaces(parentNamespace);
+      clientLogger.info(
+          "Listed {} namespaces in namespace {} for catalog {} from target.",
+          namespacesTarget.size(),
+          parentNamespace,
+          catalogName);
+    } catch (Exception e) {
+      clientLogger.error(
+          "Failed to list namespaces in namespace {} for catalog {} from target.",
+          parentNamespace,
+          catalogName,
+          e);
+      return;
+    }
+
+    SynchronizationPlan<Namespace> namespaceSynchronizationPlan =
+        syncPlanner.planNamespaceSync(
+            catalogName, parentNamespace, namespacesSource, namespacesTarget);
+
+    int syncsCompleted = 0;
+    int totalSyncsToComplete = totalSyncsToComplete(namespaceSynchronizationPlan);
+
+    namespaceSynchronizationPlan
+        .entitiesNotModified()
+        .forEach(
+            namespace ->
+                clientLogger.info(
+                    "No change detected for namespace {} in namespace {} for catalog {}, skipping.",
+                    namespace,
+                    parentNamespace,
+                    catalogName));
+
+    for (Namespace namespace : namespaceSynchronizationPlan.entitiesToCreate()) {
       try {
-        namespacesSource = sourceNamespaceCatalog.listNamespaces(parentNamespace);
+        Map<String, String> namespaceMetadata = sourceIcebergCatalogService.loadNamespaceMetadata(namespace);
+        targetIcebergCatalogService.createNamespace(namespace, namespaceMetadata);
         clientLogger.info(
-            "Listed {} namespaces in namespace {} for catalog {} from source.",
-            namespacesSource.size(),
-            parentNamespace,
-            catalogName);
-      } catch (Exception e) {
-        clientLogger.error(
-            "Failed to list namespaces in namespace {} for catalog {} from source.",
+            "Created namespace {} in namespace {} for catalog {} - {}/{}",
+            namespace,
             parentNamespace,
             catalogName,
-            e);
-        return;
-      }
-
-      List<Namespace> namespacesTarget;
-
-      try {
-        namespacesTarget = targetNamespaceCatalog.listNamespaces(parentNamespace);
-        clientLogger.info(
-            "Listed {} namespaces in namespace {} for catalog {} from target.",
-            namespacesTarget.size(),
-            parentNamespace,
-            catalogName);
+            ++syncsCompleted,
+            totalSyncsToComplete);
       } catch (Exception e) {
         clientLogger.error(
-            "Failed to list namespaces in namespace {} for catalog {} from target.",
+            "Failed to create namespace {} in namespace {} for catalog {} - {}/{}",
+            namespace,
             parentNamespace,
             catalogName,
+            ++syncsCompleted,
+            totalSyncsToComplete,
             e);
-        return;
       }
+    }
 
-      SynchronizationPlan<Namespace> namespaceSynchronizationPlan =
-          syncPlanner.planNamespaceSync(
-              catalogName, parentNamespace, namespacesSource, namespacesTarget);
+    for (Namespace namespace : namespaceSynchronizationPlan.entitiesToOverwrite()) {
+      try {
+        Map<String, String> sourceNamespaceMetadata =
+            sourceIcebergCatalogService.loadNamespaceMetadata(namespace);
+        Map<String, String> targetNamespaceMetadata =
+            targetIcebergCatalogService.loadNamespaceMetadata(namespace);
 
-      int syncsCompleted = 0;
-      int totalSyncsToComplete = totalSyncsToComplete(namespaceSynchronizationPlan);
-
-      namespaceSynchronizationPlan
-          .entitiesNotModified()
-          .forEach(
-              namespace ->
-                  clientLogger.info(
-                      "No change detected for namespace {} in namespace {} for catalog {}, skipping.",
-                      namespace,
-                      parentNamespace,
-                      catalogName));
-
-      for (Namespace namespace : namespaceSynchronizationPlan.entitiesToCreate()) {
-        try {
-          targetNamespaceCatalog.createNamespace(namespace);
+        if (sourceNamespaceMetadata.equals(targetNamespaceMetadata)) {
           clientLogger.info(
-              "Created namespace {} in namespace {} for catalog {} - {}/{}",
+              "Namespace metadata for namespace {} in namespace {} for catalog {} was not modified, skipping. - {}/{}",
               namespace,
               parentNamespace,
               catalogName,
               ++syncsCompleted,
               totalSyncsToComplete);
-        } catch (Exception e) {
-          clientLogger.error(
-              "Failed to create namespace {} in namespace {} for catalog {} - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete,
-              e);
+          continue;
         }
+
+        targetIcebergCatalogService.setNamespaceProperties(namespace, sourceNamespaceMetadata);
+
+        clientLogger.info(
+            "Overwrote namespace metadata {} in namespace {} for catalog {} - {}/{}",
+            namespace,
+            parentNamespace,
+            catalogName,
+            ++syncsCompleted,
+            totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error(
+            "Failed to overwrite namespace metadata {} in namespace {} for catalog {} - {}/{}",
+            namespace,
+            parentNamespace,
+            catalogName,
+            ++syncsCompleted,
+            totalSyncsToComplete,
+            e);
       }
+    }
 
-      for (Namespace namespace : namespaceSynchronizationPlan.entitiesToOverwrite()) {
-        try {
-          Map<String, String> sourceNamespaceMetadata =
-              sourceNamespaceCatalog.loadNamespaceMetadata(namespace);
-          Map<String, String> targetNamespaceMetadata =
-              targetNamespaceCatalog.loadNamespaceMetadata(namespace);
-
-          if (sourceNamespaceMetadata.equals(targetNamespaceMetadata)) {
-            clientLogger.info(
-                "Namespace metadata for namespace {} in namespace {} for catalog {} was not modified, skipping. - {}/{}",
-                namespace,
-                parentNamespace,
-                catalogName,
-                ++syncsCompleted,
-                totalSyncsToComplete);
-            continue;
-          }
-
-          target.dropNamespaceCascade(targetIcebergCatalog, namespace);
-          targetNamespaceCatalog.createNamespace(namespace, sourceNamespaceMetadata);
-
-          clientLogger.info(
-              "Overwrote namespace {} in namespace {} for catalog {} - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete);
-        } catch (Exception e) {
-          clientLogger.error(
-              "Failed to overwrite namespace {} in namespace {} for catalog {} - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete,
-              e);
-        }
+    for (Namespace namespace : namespaceSynchronizationPlan.entitiesToRemove()) {
+      try {
+        targetIcebergCatalogService.dropNamespaceCascade(namespace);
+        clientLogger.info(
+            "Removed namespace {} in namespace {} for catalog {} - {}/{}",
+            namespace,
+            parentNamespace,
+            catalogName,
+            ++syncsCompleted,
+            totalSyncsToComplete);
+      } catch (Exception e) {
+        clientLogger.error(
+            "Failed to remove namespace {} in namespace {} for catalog {} - {}/{}",
+            namespace,
+            parentNamespace,
+            catalogName,
+            ++syncsCompleted,
+            totalSyncsToComplete,
+            e);
       }
+    }
 
-      for (Namespace namespace : namespaceSynchronizationPlan.entitiesToRemove()) {
-        try {
-          target.dropNamespaceCascade(targetIcebergCatalog, namespace);
-          clientLogger.info(
-              "Removed namespace {} in namespace {} for catalog {} - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete);
-        } catch (Exception e) {
-          clientLogger.error(
-              "Failed to remove namespace {} in namespace {} for catalog {} - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete,
-              e);
-        }
-      }
-
-      for (Namespace namespace : namespaceSynchronizationPlan.entitiesToSyncChildren()) {
-        syncTables(catalogName, namespace, sourceIcebergCatalog, targetIcebergCatalog);
-        syncNamespaces(catalogName, namespace, sourceIcebergCatalog, targetIcebergCatalog);
-      }
+    for (Namespace namespace : namespaceSynchronizationPlan.entitiesToSyncChildren()) {
+      syncTables(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
+      syncNamespaces(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
     }
   }
 
@@ -1140,18 +1067,18 @@ public class PolarisSynchronizer {
    *
    * @param catalogName
    * @param namespace
-   * @param sourceIcebergCatalog
-   * @param targetIcebergCatalog
+   * @param sourceIcebergCatalogService
+   * @param targetIcebergCatalogService
    */
   public void syncTables(
       String catalogName,
       Namespace namespace,
-      org.apache.iceberg.catalog.Catalog sourceIcebergCatalog,
-      org.apache.iceberg.catalog.Catalog targetIcebergCatalog) {
+      IcebergCatalogService sourceIcebergCatalogService,
+      IcebergCatalogService targetIcebergCatalogService) {
     Set<TableIdentifier> sourceTables;
 
     try {
-      sourceTables = new HashSet<>(sourceIcebergCatalog.listTables(namespace));
+      sourceTables = new HashSet<>(sourceIcebergCatalogService.listTables(namespace));
       clientLogger.info(
           "Listed {} tables in namespace {} for catalog {} on source.",
           sourceTables.size(),
@@ -1169,7 +1096,7 @@ public class PolarisSynchronizer {
     Set<TableIdentifier> targetTables;
 
     try {
-      targetTables = new HashSet<>(targetIcebergCatalog.listTables(namespace));
+      targetTables = new HashSet<>(targetIcebergCatalogService.listTables(namespace));
       clientLogger.info(
           "Listed {} tables in namespace {} for catalog {} on target.",
           targetTables.size(),
@@ -1202,10 +1129,10 @@ public class PolarisSynchronizer {
 
     for (TableIdentifier tableId : tableSyncPlan.entitiesToCreate()) {
       try {
-        Table table = sourceIcebergCatalog.loadTable(tableId);
+        Table table = sourceIcebergCatalogService.loadTable(tableId);
 
         if (table instanceof BaseTable baseTable) {
-          targetIcebergCatalog.registerTable(
+          targetIcebergCatalogService.registerTable(
               tableId, baseTable.operations().current().metadataFileLocation());
         } else {
           throw new IllegalStateException("Cannot register table that does not extend BaseTable.");
@@ -1238,16 +1165,16 @@ public class PolarisSynchronizer {
       try {
         Table table;
 
-        if (sourceIcebergCatalog instanceof PolarisCatalog polarisCatalog) {
+        if (sourceIcebergCatalogService instanceof PolarisIcebergCatalogService polarisCatalogService) {
           String etag = etagManager.getETag(catalogName, tableId);
-          table = polarisCatalog.loadTable(tableId, etag);
+          table = polarisCatalogService.loadTable(tableId, etag);
         } else {
-          table = sourceIcebergCatalog.loadTable(tableId);
+          table = sourceIcebergCatalogService.loadTable(tableId);
         }
 
         if (table instanceof BaseTable baseTable) {
-          targetIcebergCatalog.dropTable(tableId, /* purge */ false);
-          targetIcebergCatalog.registerTable(
+          targetIcebergCatalogService.dropTableWithoutPurge(tableId);
+          targetIcebergCatalogService.registerTable(
               tableId, baseTable.operations().current().metadataFileLocation());
         } else {
           throw new IllegalStateException("Cannot register table that does not extend BaseTable.");
@@ -1286,7 +1213,7 @@ public class PolarisSynchronizer {
 
     for (TableIdentifier table : tableSyncPlan.entitiesToRemove()) {
       try {
-        targetIcebergCatalog.dropTable(table, /* purge */ false);
+        targetIcebergCatalogService.dropTableWithoutPurge(table);
         clientLogger.info(
             "Dropped table {} in namespace {} in catalog {}. - {}/{}",
             table,

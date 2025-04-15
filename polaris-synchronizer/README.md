@@ -56,13 +56,13 @@ and a catalog role per catalog with the appropriate grants to read all entities 
 **Example:** Create a **read-only** principal on the source Polaris instance, and replace it if it already exists,
 with 10 concurrent catalog setup threads:
 ```
-java -jar polaris-synchronizer-cli.jar create-omnipotent-principal \
---polaris-client-id root \ 
---polaris-client-secret <client-secret> \
---polaris-base-url http://localhost:8181 \
---polaris-oauth2-server-uri http://localhost:8181/api/catalog/v1/oauth/tokens \
---polaris-scope PRINCIPAL_ROLE:ALL \
---replace \ # replace if it exists
+java -jar cli/build/libs/polaris-synchronizer-cli.jar create-omnipotent-principal \
+--polaris-api-connection-properties base-url=http://localhost:8181 \
+--polaris-api-connection-properties oauth2-server-uri=http://localhost:8181/api/catalog/v1/oauth/tokens \
+--polaris-api-connection-properties client-id=root \
+--polaris-api-connection-properties client-secret=<client_secret> \
+--polaris-api-connection-properties scope=PRINCIPAL_ROLE:ALL \
+--replace \ # replace it if it already exists
 --concurrency 10 # 10 concurrent catalog setup threads
 ```
 
@@ -99,14 +99,15 @@ To create a read-write principal, we simply specify the `--write-access` option.
 **Example:** Create a read-write principal on your target Polaris instance, replacing it if it exists, with 10 concurrent
 catalog setup threads.
 ```
-java -jar polaris-synchronizer-cli.jar create-omnipotent-principal \
---polaris-client-id root \ 
---polaris-client-secret <client-secret> \
---polaris-base-url http://localhost:8181 \
---polaris-oauth2-server-uri http://localhost:8181/api/catalog/v1/oauth/tokens \
---polaris-scope PRINCIPAL_ROLE:ALL \
---replace \ # replace if it exists
---concurrency 10 \ # 10 concurrent catalog setup threads 
+java -jar cli/build/libs/polaris-synchronizer-cli.jar \
+create-omnipotent-principal \
+--polaris-api-connection-properties base-url=http://localhost:8181 \
+--polaris-api-connection-properties oauth2-server-uri=http://localhost:8181/api/catalog/v1/oauth/tokens \
+--polaris-api-connection-properties client-id=root \
+--polaris-api-connection-properties client-secret=<client_secret> \
+--polaris-api-connection-properties scope=PRINCIPAL_ROLE:ALL \
+--replace \ # replace if it already exists
+--concurrency 10 \ # 10 concurrent catalog setup threads
 --write-access # give the principal write access to catalog internals
 ```
 
@@ -143,20 +144,23 @@ diff between the source and target Polaris instances. This can be achieved using
 **Example** Running the synchronization between source Polaris instance using an access token, and a target Polaris instance
 using client credentials.
 ```
-java -jar polaris-synchronizer-cli.jar sync-polaris \
---source-base-url http://localhost:8182 \
---source-access-token <bearer-token> \
---target-base-url http://localhost:8181 \
---target-client-id root \
---target-client-secret <secret> \
---target-oauth2-server-uri http://localhost:8181/api/catalog/v1/oauth/tokens \
---target-scope PRINCIPAL_ROLE:ALL \
---source-omni-principal-name omnipotent-principal-XXXXX \
---source-omni-client-id ff7s8f9asbX10 \
---source-omni-client-secret <secret> \
---target-omni-principal-name omnipotent-principal-YYYYY \
---target-omni-client-id 0af20a3a0037a40d \
---target-omni-client-secret <client-secret>
+java -jar cli/build/libs/polaris-synchronizer-cli.jar sync-polaris \
+--source-properties base-url=http://localhost:8181 \
+--source-properties client-id=root \
+--source-properties client-secret=<client_secret> \
+--source-properties oauth2-server-uri=http://localhost:8181/api/catalog/v1/oauth/tokens \
+--source-properties scope=PRINCIPAL_ROLE:ALL \
+--source-properties omnipotent-principal-name=omnipotent-principal-XXXXX \
+--source-properties omnipotent-principal-client-id=589550e8b23d271e \
+--source-properties omnipotent-principal-client-secret=<omni_client_secret> \
+--target-properties base-url=http://localhost:5858 \
+--target-properties client-id=root \
+--target-properties client-secret=<client_secret> \
+--target-properties oauth2-server-uri=http://localhost:5858/api/catalog/v1/oauth/tokens \
+--target-properties scope=PRINCIPAL_ROLE:ALL \
+--target-properties omnipotent-principal-name=omnipotent-principal-YYYYY \
+--target-properties omnipotent-principal-client-id=9b8ac0f1e4e2e614 \
+--target-properties omnipotent-principal-client-secret=<omni_client_secret>
 ```
 
 > :warning: The tool will not migrate the `service_admin`, `catalog_admin`, nor the omnipotent principals from the source

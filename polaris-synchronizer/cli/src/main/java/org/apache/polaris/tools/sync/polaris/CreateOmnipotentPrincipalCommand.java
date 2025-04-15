@@ -20,6 +20,7 @@ package org.apache.polaris.tools.sync.polaris;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -31,7 +32,8 @@ import org.apache.polaris.core.admin.model.Catalog;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.access.AccessControlService;
-import org.apache.polaris.tools.sync.polaris.options.PolarisOptions;
+import org.apache.polaris.tools.sync.polaris.service.PolarisService;
+import org.apache.polaris.tools.sync.polaris.service.impl.PolarisApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -51,8 +53,20 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
 
   private final Logger consoleLog = LoggerFactory.getLogger("console-log");
 
-  @CommandLine.ArgGroup(exclusive = false, multiplicity = "1", heading = "Polaris options: %n")
-  private PolarisOptions options;
+  @CommandLine.Option(
+          names = {"--polaris-api-connection-properties"},
+          required = true,
+          description = "The connection properties to connect to the Polaris API." +
+                  "\nProperties:" +
+                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
+                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
+                    "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
+                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
+                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
+                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
+                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)"
+  )
+  private Map<String, String> polarisApiConnectionProperties;
 
   @CommandLine.Option(
       names = {"--replace"},
@@ -79,8 +93,17 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
 
   @Override
   public Integer call() throws Exception {
-    PolarisService polaris = options.buildService();
-    AccessControlService accessControlService = new AccessControlService(polaris);
+    polarisApiConnectionProperties.putIfAbsent("iceberg-write-access", String.valueOf(withWriteAccess));
+
+    PolarisService polaris = PolarisServiceFactory.createPolarisService(
+            PolarisServiceFactory.ServiceType.API,
+            withWriteAccess
+                    ? PolarisServiceFactory.EndpointType.TARGET
+                    : PolarisServiceFactory.EndpointType.SOURCE,
+            polarisApiConnectionProperties
+    );
+
+    AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
 
     PrincipalWithCredentials principalWithCredentials;
 
@@ -136,9 +159,10 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
                       "Failed to setup omnipotent catalog role for catalog {} with {} access. - {}/{}",
                       catalog.getName(),
                       permissionLevel,
-                      completedCatalogSetups.getAndIncrement(),
+                      completedCatalogSetups.incrementAndGet(),
                       catalogs.size(),
                       e);
+                  return;
                 }
 
                 consoleLog.info(
