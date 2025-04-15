@@ -48,17 +48,10 @@ public class SyncPolarisCommand implements Callable<Integer> {
   private final Logger consoleLog = LoggerFactory.getLogger("console-log");
 
   @CommandLine.Option(
-          names = {"--source-type"},
-          required = true,
-          description = "The type of the Polaris entity source. One of { API }"
-  )
-  private PolarisServiceFactory.ServiceType sourceType;
-
-  @CommandLine.Option(
           names = {"--source-properties"},
           required = true,
           description = "Properties to initialize Polaris entity source." +
-                  "\nProperties (source-type=API):" +
+                  "\nProperties:" +
                   "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
                   "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
                   "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
@@ -70,17 +63,10 @@ public class SyncPolarisCommand implements Callable<Integer> {
   private Map<String, String> sourceProperties;
 
   @CommandLine.Option(
-          names = {"--target-type"},
-          required = true,
-          description = "The type of the Polaris entity target. One of { API }"
-  )
-  private PolarisServiceFactory.ServiceType targetType;
-
-  @CommandLine.Option(
           names = {"--target-properties"},
           required = true,
           description = "Properties to initialize Polaris entity target." +
-                  "\nProperties (target-type=API):" +
+                  "\nProperties:" +
                   "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
                   "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
                   "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
@@ -113,9 +99,9 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
 
     PolarisService source = PolarisServiceFactory.createPolarisService(
-            sourceType, PolarisServiceFactory.EndpointType.SOURCE, sourceProperties);
+            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.SOURCE, sourceProperties);
     PolarisService target = PolarisServiceFactory.createPolarisService(
-            sourceType, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
+            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
 
     ETagManager etagService;
 
