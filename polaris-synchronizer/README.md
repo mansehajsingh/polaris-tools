@@ -12,8 +12,10 @@ Polaris specific entities, like principal-roles, catalog-roles, grants.
 * **Migration:** A user may have an active Polaris deployment that they want to migrate to a managed cloud offering like
   [Snowflake Open Catalog](https://www.snowflake.com/en/product/features/open-catalog/).
 * **Preventing Vendor Lock-In:** A user may currently have a managed Polaris offering and want the freedom to switch providers or to host Polaris themselves.
-* **Mirroring/Disaster Recovery:** Modern data solutions require employing redundancy to ensure no single point of
-  failure. The tool can be scheduled on a cron to run periodic incremental syncs.
+* **Backup:** Modern data solutions often require employing redundancy. This tool can be run on a periodic cron to keep snapshots of a Polaris instance.
+
+In the case of migration to/from a cloud offering, access to the Polaris metastore is possibly limited or entirely restricted. 
+This tool instead uses the Polaris REST API to perform the migration/synchronization.
 
 The tool currently supports migrating the following Polaris Management entities:
 * Optionally, Principals (with `--sync-principals` flag). Credentials will be different on the target instance.
