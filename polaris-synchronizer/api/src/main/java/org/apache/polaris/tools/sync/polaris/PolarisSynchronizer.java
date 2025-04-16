@@ -59,7 +59,7 @@ public class PolarisSynchronizer {
 
   private final ETagManager etagManager;
 
-  private boolean haltOnFailure;
+  private final boolean haltOnFailure;
 
   public PolarisSynchronizer(
       Logger clientLogger,
