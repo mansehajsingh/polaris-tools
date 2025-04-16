@@ -27,6 +27,7 @@ import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagManager;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
+import org.apache.polaris.tools.sync.polaris.planning.NameFilterPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.service.PolarisService;
@@ -53,6 +54,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
           description = "Properties to initialize Polaris entity source." +
                   "\nProperties:" +
                   "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
+                  "\n\t- catalog-filter: regex filter for catalog names to filter by" +
                   "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
                   "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
                   "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
@@ -72,6 +74,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
           description = "Properties to initialize Polaris entity target." +
                   "\nProperties:" +
                   "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
+                  "\n\t- catalog-filter: regex filter for catalog names to filter by" +
                   "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
                   "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
                   "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
@@ -108,7 +111,8 @@ public class SyncPolarisCommand implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
-    SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceParityPlanner);
+    SynchronizationPlanner sourceNameFilterPlanner = new NameFilterPlanner(sourceParityPlanner, sourceProperties, targetProperties);
+    SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceNameFilterPlanner);
     SynchronizationPlanner accessControlAwarePlanner = new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
 
 
