@@ -99,6 +99,12 @@ public class SyncPolarisCommand implements Callable<Integer> {
   )
   private boolean shouldSyncPrincipals;
 
+  @CommandLine.Option(
+          names = {"--halt-on-failure"},
+          description = "Hard fail and stop the synchronization when an error occurs."
+  )
+  private boolean haltOnFailure;
+
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
@@ -136,6 +142,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
     PolarisSynchronizer synchronizer =
         new PolarisSynchronizer(
             consoleLog,
+            haltOnFailure,
             accessControlAwarePlanner,
             source,
             target,
