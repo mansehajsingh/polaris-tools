@@ -20,8 +20,13 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import org.apache.iceberg.catalog.TableIdentifier;
 
+import java.util.Map;
+
 /** Implementation that returns nothing and stores no ETags. */
 public class NoOpETagManager implements ETagManager {
+
+  @Override
+  public void initialize(Map<String, String> properties) {}
 
   @Override
   public String getETag(String catalogName, TableIdentifier tableIdentifier) {

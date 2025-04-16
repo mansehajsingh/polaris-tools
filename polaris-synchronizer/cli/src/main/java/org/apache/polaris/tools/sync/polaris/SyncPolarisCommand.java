@@ -19,12 +19,10 @@
 package org.apache.polaris.tools.sync.polaris;
 
 import java.io.Closeable;
-import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
-import org.apache.polaris.tools.sync.polaris.catalog.NoOpETagManager;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
@@ -86,9 +84,21 @@ public class SyncPolarisCommand implements Callable<Integer> {
   private Map<String, String> targetProperties;
 
   @CommandLine.Option(
-      names = {"--etag-file"},
-      description = "The file path of the file to retrieve and store table ETags from.")
-  private String etagFilePath;
+          names = {"--etag-storage-type"},
+          defaultValue = "NONE",
+          description = "One of { NONE, FILE, CUSTOM }. Default: NONE. The storage manager to use for storing ETags."
+  )
+  private ETagManagerFactory.Type etagManagerType;
+
+  @CommandLine.Option(
+          names = {"--etag-storage-properties"},
+          description = "Properties to initialize ETag storage." +
+                  "\nFor type FILE:" +
+                  "\n\t- " + CsvETagManager.CSV_FILE_PROPERTY + ": The CSV file to read ETags from and write ETags to." +
+                  "\nFor type CUSTOM:" +
+                  "\n\t- " + ETagManagerFactory.CUSTOM_CLASS_NAME_PROPERTY+ ": The classname for the custom ETagManager implementation."
+  )
+  private Map<String, String> etagManagerProperties;
 
   @CommandLine.Option(
           names = {"--sync-principals"},
@@ -117,14 +127,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
     PolarisService target = PolarisServiceFactory.createPolarisService(
             PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
 
-    ETagManager etagService;
-
-    if (etagFilePath != null) {
-      File etagFile = new File(etagFilePath);
-      etagService = new CsvETagManager(etagFile);
-    } else {
-      etagService = new NoOpETagManager();
-    }
+    ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
 
     Runtime.getRuntime()
         .addShutdownHook(

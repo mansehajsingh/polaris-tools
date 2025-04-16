@@ -20,11 +20,20 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import org.apache.iceberg.catalog.TableIdentifier;
 
+import java.util.Map;
+
 /**
  * Generic interface to provide and store ETags for tables within catalogs. This allows the storage
  * of the ETag to be completely independent from the tool.
  */
 public interface ETagManager {
+
+  /**
+   * Used to initialize the instance for use. Should be called prior to
+   * calling any methods.
+   * @param properties properties to configure instance with
+   */
+  void initialize(Map<String, String> properties);
 
   /**
    * Retrieves the ETag for the table.

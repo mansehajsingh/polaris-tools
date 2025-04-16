@@ -37,6 +37,8 @@ import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 /** Implementation that stores/loads ETags to/from a CSV file. */
 public class CsvETagManager implements ETagManager, Closeable {
 
+  public static final String CSV_FILE_PROPERTY = "csv-file";
+
   private static final String CATALOG_HEADER = "Catalog";
 
   private static final String TABLE_ID_HEADER = "TableIdentifier";
@@ -45,32 +47,49 @@ public class CsvETagManager implements ETagManager, Closeable {
 
   private static final String[] HEADERS = {CATALOG_HEADER, TABLE_ID_HEADER, ETAG_HEADER};
 
-  private final File file;
+  private File file;
 
   private final Map<String, Map<TableIdentifier, String>> tablesByCatalogName;
 
-  public CsvETagManager(File file) throws IOException {
+  public CsvETagManager() {
     this.tablesByCatalogName = new HashMap<>();
-    this.file = file;
+  }
+
+  @Override
+  public void initialize(Map<String, String> properties) {
+    if (!properties.containsKey(CSV_FILE_PROPERTY)) {
+      throw new IllegalArgumentException("Missing required property " + CSV_FILE_PROPERTY);
+    }
+
+    this.file = new File(properties.get(CSV_FILE_PROPERTY));
 
     if (file.exists()) {
       CSVFormat readerCSVFormat =
-          CSVFormat.DEFAULT.builder().setHeader(HEADERS).setSkipHeaderRecord(true).get();
+              CSVFormat.DEFAULT.builder().setHeader(HEADERS).setSkipHeaderRecord(true).get();
 
-      CSVParser parser =
-          CSVParser.parse(Files.newBufferedReader(file.toPath(), UTF_8), readerCSVFormat);
+        CSVParser parser;
 
-      for (CSVRecord record : parser.getRecords()) {
+        try {
+            parser = CSVParser.parse(Files.newBufferedReader(file.toPath(), UTF_8), readerCSVFormat);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        for (CSVRecord record : parser.getRecords()) {
         this.tablesByCatalogName.putIfAbsent(record.get(CATALOG_HEADER), new HashMap<>());
 
         TableIdentifier tableId = TableIdentifier.parse(record.get(TABLE_ID_HEADER));
 
         this.tablesByCatalogName
-            .get(record.get(CATALOG_HEADER))
-            .put(tableId, record.get(ETAG_HEADER));
+                .get(record.get(CATALOG_HEADER))
+                .put(tableId, record.get(ETAG_HEADER));
       }
 
-      parser.close();
+        try {
+            parser.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
   }
 
