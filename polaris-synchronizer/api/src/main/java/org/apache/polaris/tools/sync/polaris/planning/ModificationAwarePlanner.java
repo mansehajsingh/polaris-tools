@@ -71,6 +71,7 @@ public class ModificationAwarePlanner implements SynchronizationPlanner {
 
           // S3
           "storageConfigInfo.userArn",
+          "storageConfigInfo.externalId",
 
           // AZURE
           "storageConfigInfo.consentUrl",
