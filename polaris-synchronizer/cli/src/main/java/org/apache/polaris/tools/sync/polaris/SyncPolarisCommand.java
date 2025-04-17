@@ -28,6 +28,7 @@ import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.service.PolarisService;
+import org.apache.polaris.tools.sync.polaris.service.impl.PolarisApiService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -125,11 +126,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
     SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceParityPlanner);
     SynchronizationPlanner accessControlAwarePlanner = new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
 
+    // auto generate omnipotent principals with write access on the target, read only access on source
+    sourceProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false));
+    targetProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(true));
 
-    PolarisService source = PolarisServiceFactory.createPolarisService(
-            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.SOURCE, sourceProperties);
-    PolarisService target = PolarisServiceFactory.createPolarisService(
-            PolarisServiceFactory.ServiceType.API, PolarisServiceFactory.EndpointType.TARGET, targetProperties);
+    PolarisService source =
+            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, sourceProperties);
+    PolarisService target =
+            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, targetProperties);
 
     ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
 

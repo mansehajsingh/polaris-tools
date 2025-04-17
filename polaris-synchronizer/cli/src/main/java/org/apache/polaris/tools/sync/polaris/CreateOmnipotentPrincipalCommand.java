@@ -93,15 +93,11 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
 
   @Override
   public Integer call() throws Exception {
-    polarisApiConnectionProperties.putIfAbsent("iceberg-write-access", String.valueOf(withWriteAccess));
+    polarisApiConnectionProperties.putIfAbsent(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY,
+            String.valueOf(withWriteAccess));
 
     PolarisService polaris = PolarisServiceFactory.createPolarisService(
-            PolarisServiceFactory.ServiceType.API,
-            withWriteAccess
-                    ? PolarisServiceFactory.EndpointType.TARGET
-                    : PolarisServiceFactory.EndpointType.SOURCE,
-            polarisApiConnectionProperties
-    );
+            PolarisServiceFactory.ServiceType.API, polarisApiConnectionProperties);
 
     AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
 

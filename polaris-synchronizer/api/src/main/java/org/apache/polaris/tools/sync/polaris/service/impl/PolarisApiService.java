@@ -48,6 +48,12 @@ import java.util.Map;
 
 public class PolarisApiService implements PolarisService {
 
+    /**
+     * Property that denotes whether this service should create omnipotent principals
+     * with write access when initializing {@link org.apache.iceberg.catalog.Catalog}.
+     */
+    public static final String ICEBERG_WRITE_ACCESS_PROPERTY = "iceberg-write-access";
+
     private Map<String, String> properties = null;
 
     private String baseUrl = null;
@@ -99,7 +105,8 @@ public class PolarisApiService implements PolarisService {
                         .clientSecret(properties.get("omnipotent-principal-client-secret")));
 
         this.accessControlService = new AccessControlService(this);
-        this.icebergWriteAccess = Boolean.parseBoolean(properties.get("iceberg-write-access"));
+        this.icebergWriteAccess = Boolean.parseBoolean(
+                properties.getOrDefault(ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false))); // by default false
     }
 
     @Override

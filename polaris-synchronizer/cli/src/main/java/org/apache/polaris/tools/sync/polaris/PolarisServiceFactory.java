@@ -30,21 +30,18 @@ public class PolarisServiceFactory {
         API
     }
 
-    public enum EndpointType {
-        SOURCE,
-        TARGET
-    }
-
+    /**
+     * Constructs and initializes a {@link PolarisService} implementation
+     * @param serviceType a recognized service type // TODO: support a custom implementation
+     * @param properties the properties to use to initialize the service
+     * @return the constructed and initialized service
+     */
     public static PolarisService createPolarisService(
             ServiceType serviceType,
-            EndpointType endpointType,
             Map<String, String> properties
     ) {
         PolarisService service = switch (serviceType) {
-            case API -> {
-                properties.putIfAbsent("iceberg-write-access", String.valueOf(endpointType == EndpointType.TARGET));
-                yield new PolarisApiService();
-            }
+            case API -> new PolarisApiService();
         };
 
         try {
