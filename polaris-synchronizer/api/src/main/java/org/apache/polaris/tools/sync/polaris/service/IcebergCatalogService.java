@@ -40,7 +40,7 @@ public interface IcebergCatalogService {
 
     /**
      * Drop a namespace by first dropping all nested namespaces and tables underneath the namespace
-     * hierarchy. The empty namespace will not be dropped.
+     * hierarchy. The root namespace, {@link Namespace#empty()}, will not be dropped.
      * @param namespace the namespace to drop
      */
     void dropNamespaceCascade(Namespace namespace);

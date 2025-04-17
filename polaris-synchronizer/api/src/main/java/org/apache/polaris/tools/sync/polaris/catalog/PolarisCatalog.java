@@ -80,6 +80,8 @@ public class PolarisCatalog extends RESTCatalog
       resourcePaths = ResourcePaths.forCatalogProperties(this.properties);
     }
 
+    super.initialize(name, props);
+
     if (accessToken == null || httpClient == null || this.objectMapper == null) {
       String oauth2ServerUri = props.get("uri") + "/v1/oauth/tokens";
       String credential = props.get("credential");
@@ -99,7 +101,6 @@ public class PolarisCatalog extends RESTCatalog
       this.httpClient = HttpClient.newBuilder().build();
       this.objectMapper = new ObjectMapper();
     }
-    super.initialize(name, props);
   }
 
   @Override

@@ -23,6 +23,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.rest.ResourcePaths;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.catalog.PolarisCatalog;
 import org.apache.polaris.tools.sync.polaris.service.IcebergCatalogService;
@@ -36,13 +37,25 @@ public class PolarisIcebergCatalogService implements IcebergCatalogService {
 
     private final PolarisCatalog catalog;
 
-    public PolarisIcebergCatalogService(String uri, String catalogName, PrincipalWithCredentials migratorPrincipal) {
+    public PolarisIcebergCatalogService(
+            String baseUrl,
+            String catalogName,
+            PrincipalWithCredentials omnipotentPrincipal,
+            Map<String, String> properties
+    ) {
         Map<String, String> catalogProperties = new HashMap<>();
+        String uri = baseUrl + "/api/catalog";
         catalogProperties.put("uri", uri);
         catalogProperties.put("warehouse", catalogName);
 
-        String clientId = migratorPrincipal.getCredentials().getClientId();
-        String clientSecret = migratorPrincipal.getCredentials().getClientSecret();
+        // Default to /v1/oauth/tokens endpoint unless an explicit property was provided
+        String oauth2ServerUri = properties.getOrDefault(
+                "omnipotent-principal-oauth2-server-uri", uri + "/" + ResourcePaths.tokens());
+
+        catalogProperties.put("oauth2-server-uri", oauth2ServerUri);
+
+        String clientId = omnipotentPrincipal.getCredentials().getClientId();
+        String clientSecret = omnipotentPrincipal.getCredentials().getClientSecret();
         catalogProperties.putIfAbsent(
                 "credential", String.format("%s:%s", clientId, clientSecret));
         catalogProperties.putIfAbsent("scope", "PRINCIPAL_ROLE:ALL");

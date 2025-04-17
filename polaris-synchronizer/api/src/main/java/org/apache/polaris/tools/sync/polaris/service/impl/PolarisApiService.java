@@ -48,6 +48,8 @@ import java.util.Map;
 
 public class PolarisApiService implements PolarisService {
 
+    private Map<String, String> properties = null;
+
     private String baseUrl = null;
 
     private PolarisManagementDefaultApi api = null;
@@ -64,6 +66,8 @@ public class PolarisApiService implements PolarisService {
 
     @Override
     public void initialize(Map<String, String> properties) throws Exception {
+        this.properties = properties;
+
         String baseUrl = properties.get("base-url");
         String token = properties.get("bearer-token");
 
@@ -269,7 +273,8 @@ public class PolarisApiService implements PolarisService {
     @Override
     public IcebergCatalogService initializeIcebergCatalogService(String catalogName) {
         setupOmnipotentCatalogRoleIfNotExists(catalogName);
-        return new PolarisIcebergCatalogService(baseUrl + "/api/catalog", catalogName, omnipotentPrincipal);
+        return new PolarisIcebergCatalogService(
+                baseUrl, catalogName, omnipotentPrincipal, properties);
     }
 
 }

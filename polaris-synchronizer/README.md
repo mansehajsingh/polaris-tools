@@ -155,6 +155,7 @@ java -jar cli/build/libs/polaris-synchronizer-cli.jar sync-polaris \
 --source-properties omnipotent-principal-name=omnipotent-principal-XXXXX \
 --source-properties omnipotent-principal-client-id=589550e8b23d271e \
 --source-properties omnipotent-principal-client-secret=<omni_client_secret> \
+--source-properties omnipotent-principal-oauth2-server-uri=http://localhost:8181/api/catalog/v1/oauth/tokens \
 --target-properties base-url=http://localhost:5858 \
 --target-properties client-id=root \
 --target-properties client-secret=<client_secret> \
@@ -162,7 +163,8 @@ java -jar cli/build/libs/polaris-synchronizer-cli.jar sync-polaris \
 --target-properties scope=PRINCIPAL_ROLE:ALL \
 --target-properties omnipotent-principal-name=omnipotent-principal-YYYYY \
 --target-properties omnipotent-principal-client-id=9b8ac0f1e4e2e614 \
---target-properties omnipotent-principal-client-secret=<omni_client_secret>
+--target-properties omnipotent-principal-client-secret=<omni_client_secret> \
+--target-properties omnipotent-principal-oauth2-server-uri=http://localhost:5858/api/catalog/v1/oauth/tokens
 ```
 
 > :warning: The tool will not migrate the `service_admin`, `catalog_admin`, nor the omnipotent principals from the source

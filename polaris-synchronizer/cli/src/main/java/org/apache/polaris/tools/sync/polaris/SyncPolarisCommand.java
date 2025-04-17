@@ -60,7 +60,9 @@ public class SyncPolarisCommand implements Callable<Integer> {
                   "\nOmnipotent Principal Properties:" +
                   "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
                   "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
-                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the source Polaris"
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
+                  "\n\t- omnipotent-principal-oauth2-server-uri: (default: /v1/oauth/tokens endpoint for provided Polaris base-url) "
+                    + "the OAuth2 server to use to authenticate the omnipotent-principal for Iceberg catalog access"
   )
   private Map<String, String> sourceProperties;
 
@@ -79,7 +81,9 @@ public class SyncPolarisCommand implements Callable<Integer> {
                   "\nOmnipotent Principal Properties:" +
                   "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
                   "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
-                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the target Polaris"
+                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
+                  "\n\t- omnipotent-principal-oauth2-server-uri: (default: /v1/oauth/tokens endpoint for provided Polaris base-url) "
+                  + "the OAuth2 server to use to retrieve a bearer token for the omnipotent-principal"
   )
   private Map<String, String> targetProperties;
 
