@@ -23,3 +23,4 @@ Read more about the following tools:
 
 1. Benchmarks: [README.md](/benchmarks/README.md)
 2. Iceberg catalog migrator: [README.md](/iceberg-catalog-migrator/README.md)
+3. Polaris Migrator/Synchronizer: [README.md](/polaris-synchronizer/README.md)
