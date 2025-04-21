@@ -53,7 +53,7 @@ public interface SynchronizationPlanner {
 
     private final List<PlannerWrapper> plannerWrappers = new ArrayList<>();
 
-    private SynchronizationPlannerBuilder(SourceParitySynchronizationPlanner innermost) {
+    private SynchronizationPlannerBuilder(BaseStrategyPlanner innermost) {
       this.innermost = innermost;
     }
 
@@ -90,7 +90,7 @@ public interface SynchronizationPlanner {
     }
   }
 
-  static SynchronizationPlannerBuilder builder(SourceParitySynchronizationPlanner innermost) {
+  static SynchronizationPlannerBuilder builder(BaseStrategyPlanner innermost) {
     return new SynchronizationPlannerBuilder(innermost);
   }
 

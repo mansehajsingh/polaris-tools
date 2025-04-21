@@ -61,13 +61,16 @@ public class PolarisSynchronizer {
 
   private final boolean haltOnFailure;
 
+  private final boolean deltaOnly;
+
   public PolarisSynchronizer(
       Logger clientLogger,
       boolean haltOnFailure,
       SynchronizationPlanner synchronizationPlanner,
       PolarisService source,
       PolarisService target,
-      ETagManager etagManager) {
+      ETagManager etagManager,
+      boolean deltaOnly) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.haltOnFailure = haltOnFailure;
@@ -75,6 +78,7 @@ public class PolarisSynchronizer {
     this.source = source;
     this.target = target;
     this.etagManager = etagManager;
+    this.deltaOnly = deltaOnly;
   }
 
   /**
@@ -1035,18 +1039,25 @@ public class PolarisSynchronizer {
       try {
         Map<String, String> sourceNamespaceMetadata =
             sourceIcebergCatalogService.loadNamespaceMetadata(namespace);
-        Map<String, String> targetNamespaceMetadata =
-            targetIcebergCatalogService.loadNamespaceMetadata(namespace);
 
-        if (sourceNamespaceMetadata.equals(targetNamespaceMetadata)) {
-          clientLogger.info(
-              "Namespace metadata for namespace {} in namespace {} for catalog {} was not modified, skipping. - {}/{}",
-              namespace,
-              parentNamespace,
-              catalogName,
-              ++syncsCompleted,
-              totalSyncsToComplete);
-          continue;
+        if (this.deltaOnly) {
+          // if only configured to migrate the delta between the source and the target Polaris,
+          // then we can load the target namespace metadata and perform a comparison to discontinue early
+          // if we notice the metadata did not change
+
+          Map<String, String> targetNamespaceMetadata =
+                  targetIcebergCatalogService.loadNamespaceMetadata(namespace);
+
+          if (sourceNamespaceMetadata.equals(targetNamespaceMetadata)) {
+            clientLogger.info(
+                    "Namespace metadata for namespace {} in namespace {} for catalog {} was not modified, skipping. - {}/{}",
+                    namespace,
+                    parentNamespace,
+                    catalogName,
+                    ++syncsCompleted,
+                    totalSyncsToComplete);
+            continue;
+          }
         }
 
         targetIcebergCatalogService.setNamespaceProperties(namespace, sourceNamespaceMetadata);
@@ -1206,7 +1217,7 @@ public class PolarisSynchronizer {
       try {
         Table table;
 
-        if (sourceIcebergCatalogService instanceof PolarisIcebergCatalogService polarisCatalogService) {
+        if (this.deltaOnly && sourceIcebergCatalogService instanceof PolarisIcebergCatalogService polarisCatalogService) {
           String etag = etagManager.getETag(catalogName, tableId);
           table = polarisCatalogService.loadTable(tableId, etag);
         } else {

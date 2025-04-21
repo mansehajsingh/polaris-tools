@@ -24,7 +24,7 @@ import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.CatalogNameFilterPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
-import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
+import org.apache.polaris.tools.sync.polaris.planning.BaseStrategyPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.service.PolarisService;
 import org.apache.polaris.tools.sync.polaris.service.impl.PolarisApiService;
@@ -98,10 +98,30 @@ public class SyncPolarisCommand implements Callable<Integer> {
   )
   private String catalogNameRegex;
 
+  @CommandLine.Option(
+          names = {"--delta-only"},
+          description = "Only synchronize the diff between the source and target Polaris."
+  )
+  private boolean deltaOnly;
+
+  @CommandLine.Option(
+          names = {"--strategy"},
+          defaultValue = "CREATE_ONLY",
+          description = "The synchronization strategy to use. Options: " +
+                  "\n\t- CREATE_ONLY: (default) Only create entities that exist on the source and do not exist on the " +
+                    "target." +
+                  "\n\t- CREATE_AND_OVERWRITE: Create entities that exist on the source and not on the target and " +
+                    "overwrite entities that exist on both the source and the target." +
+                  "\n\t- REPLICATE: Create entities that exist on the source and not on the target, " +
+                    "overwrite entities that exist on both the source and the target, " +
+                    "and remove entities from the target that do not exist on the source."
+  )
+  private BaseStrategyPlanner.Strategy strategy;
+
   @Override
   public Integer call() throws Exception {
-    SynchronizationPlanner planner = SynchronizationPlanner.builder(new SourceParitySynchronizationPlanner())
-            .wrapBy(ModificationAwarePlanner::new)
+    SynchronizationPlanner planner = SynchronizationPlanner.builder(new BaseStrategyPlanner(strategy))
+            .conditionallyWrapBy(deltaOnly, ModificationAwarePlanner::new)
             .conditionallyWrapBy(catalogNameRegex != null, p -> new CatalogNameFilterPlanner(catalogNameRegex, p))
             .wrapBy(AccessControlAwarePlanner::new)
             .build();
@@ -124,7 +144,8 @@ public class SyncPolarisCommand implements Callable<Integer> {
                       planner,
                       source,
                       target,
-                      etagManager);
+                      etagManager,
+                      deltaOnly);
       synchronizer.syncPrincipalRoles();
       if (shouldSyncPrincipals) {
         consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +

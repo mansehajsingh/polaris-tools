@@ -33,21 +33,50 @@ import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
 
 /**
- * Sync planner that attempts to create total parity between the source and target Polaris
- * instances. This involves creating new entities, overwriting entities that exist on both source
- * and target, and removing entities that exist only on the target.
+ * Planner that implements the base level strategy that can be applied to synchronize the source and target.
+ * Can be configured at different levels of modification.
  */
-public class SourceParitySynchronizationPlanner implements SynchronizationPlanner {
+public class BaseStrategyPlanner implements SynchronizationPlanner {
 
   /**
-   * Sort entities from the source into create, overwrite, and remove categories
+   * The strategy to employ when using {@link BaseStrategyPlanner}.
+   */
+  public enum Strategy {
+
+    /**
+     * Only create entities that exist on source but don't already exist on the target
+     */
+    CREATE_ONLY,
+
+    /**
+     * Create entities that do not exist on the target, and overwrite existing ones with same name/identifier
+     */
+    CREATE_AND_OVERWRITE,
+
+    /**
+     * Create entities that exist on the source and not target, update entities that exist on both, remove entities
+     * from the target that do not exist on the source.
+     */
+    REPLICATE
+
+  }
+
+  private final Strategy strategy;
+
+  public BaseStrategyPlanner(Strategy strategy) {
+    this.strategy = strategy;
+  }
+
+  /**
+   * Sort entities from the source into create, overwrite, remove, and skip categories
    * on the basis of which identifiers exist on the source and target Polaris.
    * Identifiers that are both on the source and target instance will be marked
-   * for overwrite. Entities that are only on the source instance will be marked for
-   * creation. Entities that are only on the target instance will be marked for deletion.
+   * for overwrite if overwriting is enabled. Entities that are only on the source instance
+   * will be marked for creation. Entities that are only on the target instance will be marked for deletion
+   * only if the {@link Strategy#REPLICATE} strategy is used.
    * @param entitiesOnSource the entities from the source
    * @param entitiesOnTarget the entities from the target
-   * @param supportOverwrites true if "overwriting" the entity is necessary. Most grant record entities do not need overwriting.
+   * @param requiresOverwrites true if "overwriting" the entity is necessary. Most grant record entities do not need overwriting.
    * @param entityIdentifierSupplier consumes an entity and returns an identifying representation of that entity
    * @return a {@link SynchronizationPlan} with the entities sorted based on the souce parity strategy
    * @param <T> the type of the entity
@@ -55,7 +84,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
   private <T> SynchronizationPlan<T> sortOnIdentifier(
           Collection<T> entitiesOnSource,
           Collection<T> entitiesOnTarget,
-          boolean supportOverwrites,
+          boolean requiresOverwrites,
           Function<T, Object> entityIdentifierSupplier
   ) {
     Set<Object> sourceEntityIdentifiers = entitiesOnSource.stream().map(entityIdentifierSupplier).collect(Collectors.toSet());
@@ -65,11 +94,28 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
 
     for (T entityOnSource : entitiesOnSource) {
       Object sourceEntityId = entityIdentifierSupplier.apply(entityOnSource);
+
       if (targetEntityIdentifiers.contains(sourceEntityId)) {
-        if (supportOverwrites) {
+        // If an entity with this identifier exists on both the source and the target
+
+        if (strategy == Strategy.CREATE_ONLY) {
+          // if the same entity identifier is on the source and target,
+          // but we only permit creates, skip it
+          plan.skipEntity(entityOnSource);
+        } else {
           // if the same entity identifier is on the source and the target,
           // overwrite the one on the target with the one on the source
-          plan.overwriteEntity(entityOnSource);
+
+          if (requiresOverwrites) {
+            // If the entity requires a drop-and-recreate to perform an overwrite.
+            // some grant records can be "created" indefinitely even if they already exists, for example,
+            // catalog roles can be assigned the same principal role many times
+            plan.overwriteEntity(entityOnSource);
+          } else {
+            // if the entity is not a type that requires "overwriting" in the sense of
+            // dropping and recreating, then just create it again
+            plan.createEntity(entityOnSource);
+          }
         }
       } else {
         // if the entity identifier only exists on the source, that means
@@ -89,7 +135,15 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
         // or a catalog role was revoked from a principal role, in which case the target
         // should reflect this change when the tool is run multiple times, because we don't
         // want to take chances with over-extending privileges
-        plan.removeEntity(entityOnTarget);
+
+        if (strategy == Strategy.REPLICATE) {
+          plan.removeEntity(entityOnTarget);
+        } else {
+          // skip children here because if we want to remove the entity
+          // and then that means it does not exist on the source, so there are no child
+          // entities to sync
+          plan.skipEntityAndSkipChildren(entityOnTarget);
+        }
       }
     }
 
@@ -99,7 +153,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
   @Override
   public SynchronizationPlan<Principal> planPrincipalSync(
           List<Principal> principalsOnSource, List<Principal> principalsOnTarget) {
-    return sortOnIdentifier(principalsOnSource, principalsOnTarget, /* supportsOverwrites */ true, Principal::getName);
+    return sortOnIdentifier(principalsOnSource, principalsOnTarget, /* requiresOverwrites */ true, Principal::getName);
   }
 
   @Override
@@ -111,7 +165,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
     return sortOnIdentifier(
             assignedPrincipalRolesOnSource,
             assignedPrincipalRolesOnTarget,
-            /* supportsOverwrites */ false, // do not need to overwrite an assignment of a principal role to a principal
+            /* requiresOverwrites */ false, // do not need to overwrite an assignment of a principal role to a principal
             PrincipalRole::getName
     );
   }
@@ -123,7 +177,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
     return sortOnIdentifier(
             principalRolesOnSource,
             principalRolesOnTarget,
-            /* supportsOverwrites */ true,
+            /* requiresOverwrites */ true,
             PrincipalRole::getName
     );
   }
@@ -131,7 +185,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
   @Override
   public SynchronizationPlan<Catalog> planCatalogSync(
       List<Catalog> catalogsOnSource, List<Catalog> catalogsOnTarget) {
-    return sortOnIdentifier(catalogsOnSource, catalogsOnTarget,  /* supportsOverwrites */ true, Catalog::getName);
+    return sortOnIdentifier(catalogsOnSource, catalogsOnTarget,  /* requiresOverwrites */ true, Catalog::getName);
   }
 
   @Override
@@ -140,7 +194,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       List<CatalogRole> catalogRolesOnSource,
       List<CatalogRole> catalogRolesOnTarget) {
     return sortOnIdentifier(
-            catalogRolesOnSource, catalogRolesOnTarget, /* supportsOverwrites */ true, CatalogRole::getName);
+            catalogRolesOnSource, catalogRolesOnTarget, /* requiresOverwrites */ true, CatalogRole::getName);
   }
 
   @Override
@@ -152,7 +206,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
     return sortOnIdentifier(
             grantsOnSource,
             grantsOnTarget,
-            /* supportsOverwrites */ false,
+            /* requiresOverwrites */ false,
             grant -> grant // grants can just be compared by the entire generated object
     );
   }
@@ -166,7 +220,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
     return sortOnIdentifier(
             assignedPrincipalRolesOnSource,
             assignedPrincipalRolesOnTarget,
-            /* supportsOverwrites */ false,
+            /* requiresOverwrites */ false,
             PrincipalRole::getName
     );
   }
@@ -177,7 +231,7 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       Namespace namespace,
       List<Namespace> namespacesOnSource,
       List<Namespace> namespacesOnTarget) {
-    return sortOnIdentifier(namespacesOnSource, namespacesOnTarget, /* supportsOverwrites */ true, ns -> ns);
+    return sortOnIdentifier(namespacesOnSource, namespacesOnTarget, /* requiresOverwrites */ true, ns -> ns);
   }
 
   @Override
@@ -187,6 +241,6 @@ public class SourceParitySynchronizationPlanner implements SynchronizationPlanne
       Set<TableIdentifier> tablesOnSource,
       Set<TableIdentifier> tablesOnTarget) {
     return sortOnIdentifier(
-            tablesOnSource, tablesOnTarget, /* supportsOverwrites */ true, tableId -> tableId);
+            tablesOnSource, tablesOnTarget, /* requiresOverwrites */ true, tableId -> tableId);
   }
 }
