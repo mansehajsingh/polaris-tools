@@ -7,8 +7,8 @@ import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.iceberg.rest.auth.OAuth2Util;
 import org.apache.iceberg.util.ThreadPools;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -19,8 +19,8 @@ public class AuthenticationSessionWrapper {
     /**
      * Order of token exchange preference copied over from {@link org.apache.iceberg.rest.RESTSessionCatalog}.
      */
-    private static final Set<String> TOKEN_PREFERENCE_ORDER =
-            Set.of(
+    private static final List<String> TOKEN_PREFERENCE_ORDER =
+            List.of(
                     OAuth2Properties.ID_TOKEN_TYPE,
                     OAuth2Properties.ACCESS_TOKEN_TYPE,
                     OAuth2Properties.JWT_TOKEN_TYPE,
@@ -52,7 +52,6 @@ public class AuthenticationSessionWrapper {
                         .scope(properties.get(OAuth2Properties.SCOPE))
                         .oauth2ServerUri(properties.get(OAuth2Properties.OAUTH2_SERVER_URI))
                         .token(properties.get(OAuth2Properties.TOKEN))
-                        // actor token type is always access token, Polaris needs an actor token for token exchange
                         .tokenType(OAuth2Properties.ACCESS_TOKEN_TYPE)
                         .optionalOAuthParams(OAuth2Util.buildOptionalParam(properties))
                         .build()
@@ -62,6 +61,8 @@ public class AuthenticationSessionWrapper {
         if (properties.containsKey(OAuth2Properties.CREDENTIAL)) {
             return OAuth2Util.AuthSession.fromCredential(
                     restClient,
+                    // threads created here will be daemon threads, so termination of main program
+                    // will terminate the token refresh thread automatically
                     ThreadPools.newScheduledPool(UUID.randomUUID() + "-token-refresh", 1),
                     properties.get(OAuth2Properties.CREDENTIAL),
                     parent
@@ -69,14 +70,18 @@ public class AuthenticationSessionWrapper {
         }
 
         // NOTE: We have to bias for token exchange before regular bearer token flow so we can pass the "token" property
-        // as an actor token to the token exchange request, otherwise we will always branch into the bearer token
-        // flow first even if a token exchange is being configured
+        // as a bearer token to the token exchange request, otherwise we will always branch into the bearer token
+        // flow first even if a token exchange is being configured. eg. Polaris requires the bearer to be provided
+        // for token exchange
 
         // This is for token exchange flow, Polaris only supports an access_token exchanged for an access_token for now
+        // but external OAuth provider might have support for other types of token exchange
         for (String tokenType : TOKEN_PREFERENCE_ORDER) {
             if (properties.containsKey(tokenType)) {
                 return OAuth2Util.AuthSession.fromTokenExchange(
                         restClient,
+                        // threads created here will be daemon threads, so termination of main program
+                        // will terminate the token refresh thread automatically
                         ThreadPools.newScheduledPool(UUID.randomUUID() + "-token-exchange", 1),
                         properties.get(tokenType),
                         tokenType,
@@ -89,6 +94,8 @@ public class AuthenticationSessionWrapper {
         if (properties.containsKey(OAuth2Properties.TOKEN)) {
             return OAuth2Util.AuthSession.fromAccessToken(
                     restClient,
+                    // threads created here will be daemon threads, so termination of main program
+                    // will terminate the token refresh thread automatically
                     ThreadPools.newScheduledPool(UUID.randomUUID() + "-access-token-refresh", 1),
                     properties.get(OAuth2Properties.TOKEN),
                     null, /* defaultExpiresAtMillis */
