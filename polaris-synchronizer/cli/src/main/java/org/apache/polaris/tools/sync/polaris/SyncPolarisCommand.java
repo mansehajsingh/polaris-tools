@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
+import org.apache.polaris.tools.sync.polaris.planning.CatalogNameFilterPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SourceParitySynchronizationPlanner;
 import org.apache.polaris.tools.sync.polaris.planning.SynchronizationPlanner;
@@ -90,11 +91,23 @@ public class SyncPolarisCommand implements Callable<Integer> {
   )
   private boolean haltOnFailure;
 
+  @CommandLine.Option(
+          names = {"--catalog-name-regex"},
+          description = "If specified, only catalogs with names that match the provided RegEx will be staged for " +
+                  "synchronization. This applies to catalogs on both the source and target."
+  )
+  private String catalogNameRegex;
+
   @Override
   public Integer call() throws Exception {
-    SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
-    SynchronizationPlanner modificationAwareSourceParityPlanner = new ModificationAwarePlanner(sourceParityPlanner);
-    SynchronizationPlanner accessControlAwarePlanner = new AccessControlAwarePlanner(modificationAwareSourceParityPlanner);
+    SynchronizationPlanner planner = new SourceParitySynchronizationPlanner();
+    planner = new ModificationAwarePlanner(planner);
+
+    if (catalogNameRegex != null) {
+      planner = new CatalogNameFilterPlanner(catalogNameRegex, planner);
+    }
+
+    planner = new AccessControlAwarePlanner(planner);
 
     // auto generate omnipotent principals with write access on the target, read only access on source
     sourceProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false));
@@ -111,7 +124,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
               new PolarisSynchronizer(
                       consoleLog,
                       haltOnFailure,
-                      accessControlAwarePlanner,
+                      planner,
                       source,
                       target,
                       etagManager);
