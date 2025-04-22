@@ -7,7 +7,6 @@ import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.iceberg.rest.auth.OAuth2Util;
 import org.apache.iceberg.util.ThreadPools;
 
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -15,17 +14,6 @@ import java.util.UUID;
  * Wraps {@link OAuth2Util.AuthSession} to provide supported authentication flows.
  */
 public class AuthenticationSessionWrapper {
-
-    /**
-     * Order of token exchange preference copied over from {@link org.apache.iceberg.rest.RESTSessionCatalog}.
-     */
-    private static final List<String> TOKEN_PREFERENCE_ORDER =
-            List.of(
-                    OAuth2Properties.ID_TOKEN_TYPE,
-                    OAuth2Properties.ACCESS_TOKEN_TYPE,
-                    OAuth2Properties.JWT_TOKEN_TYPE,
-                    OAuth2Properties.SAML2_TOKEN_TYPE,
-                    OAuth2Properties.SAML1_TOKEN_TYPE);
 
     private final OAuth2Util.AuthSession authSession;
 
@@ -67,27 +55,6 @@ public class AuthenticationSessionWrapper {
                     properties.get(OAuth2Properties.CREDENTIAL),
                     parent
             );
-        }
-
-        // NOTE: We have to bias for token exchange before regular bearer token flow so we can pass the "token" property
-        // as a bearer token to the token exchange request, otherwise we will always branch into the bearer token
-        // flow first even if a token exchange is being configured. eg. Polaris requires the bearer to be provided
-        // for token exchange
-
-        // This is for token exchange flow, Polaris only supports an access_token exchanged for an access_token for now
-        // but external OAuth provider might have support for other types of token exchange
-        for (String tokenType : TOKEN_PREFERENCE_ORDER) {
-            if (properties.containsKey(tokenType)) {
-                return OAuth2Util.AuthSession.fromTokenExchange(
-                        restClient,
-                        // threads created here will be daemon threads, so termination of main program
-                        // will terminate the token refresh thread automatically
-                        ThreadPools.newScheduledPool(UUID.randomUUID() + "-token-exchange", 1),
-                        properties.get(tokenType),
-                        tokenType,
-                        parent
-                );
-            }
         }
 
         // This is for regular bearer token flow
