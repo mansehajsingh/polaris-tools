@@ -22,8 +22,7 @@ public class AuthenticationSessionWrapper {
     }
 
     /**
-     * Initializes a new authentication session. Biases in order of client_credentials,
-     * token exchange, regular access token.
+     * Initializes a new authentication session. Supports client_credentials and bearer token flow.
      * @param properties properties to initialize the session with
      * @return an authentication session, with token refresh if applicable
      */
