@@ -630,8 +630,6 @@ public class PolarisSynchronizer {
     }
 
     for (Catalog catalog : catalogSyncPlan.entitiesToSyncChildren()) {
-      syncCatalogRoles(catalog.getName());
-
       IcebergCatalogService sourceIcebergCatalogService;
 
       try {
@@ -666,6 +664,11 @@ public class PolarisSynchronizer {
 
       syncNamespaces(
           catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
+
+      // NOTE: Grants are synced on a per catalog role basis, so we need to ensure that catalog roles
+      // are only synced AFTER Iceberg catalog entities, because they may depend on the Iceberg catalog
+      // entities already existing
+      syncCatalogRoles(catalog.getName());
     }
   }
 
