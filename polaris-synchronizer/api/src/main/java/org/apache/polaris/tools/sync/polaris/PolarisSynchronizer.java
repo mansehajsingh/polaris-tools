@@ -18,10 +18,14 @@
  */
 package org.apache.polaris.tools.sync.polaris;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
@@ -61,13 +65,16 @@ public class PolarisSynchronizer {
 
   private final boolean haltOnFailure;
 
+  private final ExecutorService executor;
+
   public PolarisSynchronizer(
-      Logger clientLogger,
-      boolean haltOnFailure,
-      SynchronizationPlanner synchronizationPlanner,
-      PolarisService source,
-      PolarisService target,
-      ETagManager etagManager) {
+          Logger clientLogger,
+          boolean haltOnFailure,
+          SynchronizationPlanner synchronizationPlanner,
+          PolarisService source,
+          PolarisService target,
+          ETagManager etagManager,
+          ExecutorService executor) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.haltOnFailure = haltOnFailure;
@@ -75,6 +82,7 @@ public class PolarisSynchronizer {
     this.source = source;
     this.target = target;
     this.etagManager = etagManager;
+    this.executor = executor;
   }
 
   /**
@@ -89,6 +97,22 @@ public class PolarisSynchronizer {
         + plan.entitiesToRemove().size();
   }
 
+  /**
+   * Ensures that the future is executed on the executor thread pool.
+   * @param runnable the operation to perform
+   * @return the synchronous operation wrapped in a completable future
+   */
+  private CompletableFuture<?> runAsync(Runnable runnable) {
+    return CompletableFuture.runAsync(runnable, executor);
+  }
+
+  private void handleException(String message, Throwable t) {
+    clientLogger.error(message, t);
+    if (haltOnFailure) {
+      throw new RuntimeException(message, t);
+    }
+  }
+
   /** Sync principals from source to target. */
   public void syncPrincipals() {
     List<Principal> principalsSource;
@@ -97,8 +121,7 @@ public class PolarisSynchronizer {
       principalsSource = source.listPrincipals();
       clientLogger.info("Listed {} principals from source.", principalsSource.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
-      clientLogger.info("Failed to list principals from source.", e);
+      handleException("Failed to list principals from source.", e);
       return;
     }
 
@@ -108,8 +131,7 @@ public class PolarisSynchronizer {
       principalsTarget = target.listPrincipals();
       clientLogger.info("Listed {} principals from target.", principalsTarget.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
-      clientLogger.info("Failed to list principals from target.", e);
+      handleException("Failed to list principals from target.", e);
       return;
     }
 
@@ -144,9 +166,8 @@ public class PolarisSynchronizer {
                 totalSyncsToComplete
         );
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error("Failed to create principal {} on target. - {}/{}",
-                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+        handleException(String.format("Failed to create principal %s on target. - %s/%s",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete), e);
       }
     }
 
@@ -162,9 +183,8 @@ public class PolarisSynchronizer {
                 totalSyncsToComplete
         );
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error("Failed to overwrite principal {} on target. - {}/{}",
-                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+        handleException(String.format("Failed to overwrite principal %s on target. - %s/%s",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete), e);
       }
     }
 
@@ -174,15 +194,18 @@ public class PolarisSynchronizer {
         clientLogger.info("Removed principal {} on target. - {}/{}",
                 principal.getName(), ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error("Failed to remove principal {} ont target. - {}/{}",
-                principal.getName(), ++syncsCompleted, totalSyncsToComplete, e);
+        handleException(String.format("Failed to remove principal %s ont target. - %s/%s",
+                principal.getName(), ++syncsCompleted, totalSyncsToComplete), e);
       }
     }
 
+    List<CompletableFuture<?>> childEntitySyncs = new ArrayList<>();
+
     for (Principal principal : principalSyncPlan.entitiesToSyncChildren()) {
-      syncAssignedPrincipalRolesForPrincipal(principal.getName());
+      childEntitySyncs.add(runAsync(() ->  syncAssignedPrincipalRolesForPrincipal(principal.getName())));
     }
+
+    childEntitySyncs.forEach(CompletableFuture::join);
   }
 
   /**
@@ -197,8 +220,8 @@ public class PolarisSynchronizer {
       clientLogger.info("Listed {} assigned principal-roles for principal {} from source.",
               assignedPrincipalRolesSource.size(), principalName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list assigned principal-roles for principal {} from source.", principalName, e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -209,8 +232,8 @@ public class PolarisSynchronizer {
       clientLogger.info("Listed {} assigned principal-roles for principal {} from target.",
               assignedPrincipalRolesTarget.size(), principalName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list assigned principal-roles for principal {} from target.", principalName, e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -242,9 +265,9 @@ public class PolarisSynchronizer {
         clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error("Failed to assign principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -254,9 +277,9 @@ public class PolarisSynchronizer {
         clientLogger.info("Assigned principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error("Failed to assign principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -266,9 +289,9 @@ public class PolarisSynchronizer {
         clientLogger.info("Revoked principal-role {} from principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error("Failed to revoke principal-role {} to principal {}. - {}/{}",
                 principalRole.getName(), principalName, ++syncsCompleted, totalSyncsToComplete);
+        if (haltOnFailure) throw e;
       }
     }
   }
@@ -281,8 +304,8 @@ public class PolarisSynchronizer {
       principalRolesSource = source.listPrincipalRoles();
       clientLogger.info("Listed {} principal-roles from source.", principalRolesSource.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list principal-roles from source.", e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -292,8 +315,8 @@ public class PolarisSynchronizer {
       principalRolesTarget = target.listPrincipalRoles();
       clientLogger.info("Listed {} principal-roles from target.", principalRolesTarget.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list principal-roles from target.", e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -326,13 +349,13 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to create principal-role {} on target. - {}/{}",
             principalRole.getName(),
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -346,13 +369,13 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to overwrite principal-role {} on target. - {}/{}",
             principalRole.getName(),
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -365,13 +388,13 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to remove principal-role {} on target. - {}/{}",
             principalRole.getName(),
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
   }
@@ -394,12 +417,12 @@ public class PolarisSynchronizer {
           catalogRoleName,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list assignee principal-roles for catalog-role {} in catalog {} from source.",
           catalogRoleName,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -414,12 +437,12 @@ public class PolarisSynchronizer {
           catalogRoleName,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list assignee principal-roles for catalog-role {} in catalog {} from target.",
           catalogRoleName,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -462,7 +485,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to assign principal-role {} to catalog-role {} in catalog {}. - {}/{}",
             principalRole.getName(),
@@ -471,6 +493,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -486,7 +509,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to assign principal-role {} to catalog-role {} in catalog {}. - {}/{}",
             principalRole.getName(),
@@ -495,6 +517,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -510,7 +533,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to revoke principal-role {} from catalog-role {} in catalog {}. - {}/{}",
             principalRole.getName(),
@@ -519,6 +541,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
   }
@@ -531,8 +554,8 @@ public class PolarisSynchronizer {
       catalogsSource = source.listCatalogs();
       clientLogger.info("Listed {} catalogs from source.", catalogsSource.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list catalogs from source.", e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -542,8 +565,8 @@ public class PolarisSynchronizer {
       catalogsTarget = target.listCatalogs();
       clientLogger.info("Listed {} catalogs from target.", catalogsTarget.size());
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error("Failed to list catalogs from target.", e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -580,7 +603,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
+        //if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to create catalog {}. - {}/{}",
             catalog.getName(),
@@ -600,7 +623,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
+        //if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to overwrite catalog {}. - {}/{}",
             catalog.getName(),
@@ -619,7 +642,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
+        //if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to remove catalog {}. - {}/{}",
             catalog.getName(),
@@ -629,47 +652,53 @@ public class PolarisSynchronizer {
       }
     }
 
+    List<CompletableFuture<?>> childEntitySyncs = new ArrayList<>();
+
     for (Catalog catalog : catalogSyncPlan.entitiesToSyncChildren()) {
-      IcebergCatalogService sourceIcebergCatalogService;
+      childEntitySyncs.add(runAsync(() -> {
+        IcebergCatalogService sourceIcebergCatalogService;
 
-      try {
-        sourceIcebergCatalogService = source.initializeIcebergCatalogService(catalog.getName());
-        clientLogger.info(
-            "Initialized Iceberg REST catalog for Polaris catalog {} on source.",
-            catalog.getName());
-      } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error(
-            "Failed to initialize Iceberg REST catalog for Polaris catalog {} on source.",
-            catalog.getName(),
-            e);
-        continue;
-      }
+        try {
+          sourceIcebergCatalogService = source.initializeIcebergCatalogService(catalog.getName());
+          clientLogger.info(
+                  "Initialized Iceberg REST catalog for Polaris catalog {} on source.",
+                  catalog.getName());
+        } catch (Exception e) {
+          clientLogger.error(
+                  "Failed to initialize Iceberg REST catalog for Polaris catalog {} on source.",
+                  catalog.getName(),
+                  e);
+          if (haltOnFailure) throw e;
+          return;
+        }
 
-      IcebergCatalogService targetIcebergCatalogService;
+        IcebergCatalogService targetIcebergCatalogService;
 
-      try {
-        targetIcebergCatalogService = target.initializeIcebergCatalogService(catalog.getName());
-        clientLogger.info(
-            "Initialized Iceberg REST catalog for Polaris catalog {} on target.",
-            catalog.getName());
-      } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error(
-            "Failed to initialize Iceberg REST catalog for Polaris catalog {} on target.",
-            catalog.getName(),
-            e);
-        continue;
-      }
+        try {
+          targetIcebergCatalogService = target.initializeIcebergCatalogService(catalog.getName());
+          clientLogger.info(
+                  "Initialized Iceberg REST catalog for Polaris catalog {} on target.",
+                  catalog.getName());
+        } catch (Exception e) {
+          clientLogger.error(
+                  "Failed to initialize Iceberg REST catalog for Polaris catalog {} on target.",
+                  catalog.getName(),
+                  e);
+          if (haltOnFailure) throw e;
+          return;
+        }
 
-      syncNamespaces(
-          catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
+        syncNamespaces(
+                catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
 
-      // NOTE: Grants are synced on a per catalog role basis, so we need to ensure that catalog roles
-      // are only synced AFTER Iceberg catalog entities, because they may depend on the Iceberg catalog
-      // entities already existing
-      syncCatalogRoles(catalog.getName());
+        // NOTE: Grants are synced on a per catalog role basis, so we need to ensure that catalog roles
+        // are only synced AFTER Iceberg catalog entities, because they may depend on the Iceberg catalog
+        // entities already existing
+        syncCatalogRoles(catalog.getName());
+      }));
     }
+
+    childEntitySyncs.forEach(CompletableFuture::join);
   }
 
   /**
@@ -687,9 +716,9 @@ public class PolarisSynchronizer {
           catalogRolesSource.size(),
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list catalog-roles for catalog {} from source.", catalogName, e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -702,9 +731,9 @@ public class PolarisSynchronizer {
           catalogRolesTarget.size(),
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list catalog-roles for catalog {} from target.", catalogName, e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -749,7 +778,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to create catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -757,6 +785,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -771,7 +800,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to overwrite catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -779,6 +807,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -792,7 +821,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to remove catalog-role {} for catalog {}. - {}/{}",
             catalogRole.getName(),
@@ -800,13 +828,21 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
+    List<CompletableFuture<?>> childEntitySyncs = new ArrayList<>();
+
     for (CatalogRole catalogRole : catalogRoleSyncPlan.entitiesToSyncChildren()) {
-      syncAssigneePrincipalRolesForCatalogRole(catalogName, catalogRole.getName());
-      syncGrants(catalogName, catalogRole.getName());
+      // assignee principal roles and grants do not depend on each other, can run them concurrently
+      childEntitySyncs.add(runAsync(() ->
+              syncAssigneePrincipalRolesForCatalogRole(catalogName, catalogRole.getName())));
+      childEntitySyncs.add(runAsync(() ->
+              syncGrants(catalogName, catalogRole.getName())));
     }
+
+    childEntitySyncs.forEach(CompletableFuture::join);
   }
 
   /**
@@ -826,12 +862,12 @@ public class PolarisSynchronizer {
           catalogRoleName,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list grants for catalog-role {} in catalog {} from source.",
           catalogRoleName,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -845,12 +881,12 @@ public class PolarisSynchronizer {
           catalogRoleName,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list grants for catalog-role {} in catalog {} from target.",
           catalogRoleName,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -891,7 +927,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to add grant {} to catalog-role {} for catalog {}. - {}/{}",
             grant.getType(),
@@ -900,6 +935,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -914,7 +950,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to add grant {} to catalog-role {} for catalog {}. - {}/{}",
             grant.getType(),
@@ -923,6 +958,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -937,7 +973,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to revoke grant {} from catalog-role {} for catalog {}. - {}/{}",
             grant.getType(),
@@ -946,6 +981,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
   }
@@ -973,12 +1009,12 @@ public class PolarisSynchronizer {
           parentNamespace,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list namespaces in namespace {} for catalog {} from source.",
           parentNamespace,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -992,12 +1028,12 @@ public class PolarisSynchronizer {
           parentNamespace,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list namespaces in namespace {} for catalog {} from target.",
           parentNamespace,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -1030,7 +1066,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to create namespace {} in namespace {} for catalog {} - {}/{}",
             namespace,
@@ -1039,6 +1074,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -1070,7 +1106,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to overwrite namespace metadata {} in namespace {} for catalog {} - {}/{}",
             namespace,
@@ -1079,6 +1114,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -1093,7 +1129,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to remove namespace {} in namespace {} for catalog {} - {}/{}",
             namespace,
@@ -1102,13 +1137,24 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
+    List<CompletableFuture<?>> childEntitySyncs = new ArrayList<>();
+
     for (Namespace namespace : namespaceSynchronizationPlan.entitiesToSyncChildren()) {
-      syncTables(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
-      syncNamespaces(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
+      // namespaces and tables underneath a namespace do not depend on each other, can schedule them each
+      // separately
+      childEntitySyncs.add(runAsync(() -> {
+        syncTables(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
+      }));
+      childEntitySyncs.add(runAsync(() -> {
+        syncNamespaces(catalogName, namespace, sourceIcebergCatalogService, targetIcebergCatalogService);
+      }));
     }
+
+    childEntitySyncs.forEach(CompletableFuture::join);
   }
 
   /**
@@ -1134,12 +1180,12 @@ public class PolarisSynchronizer {
           namespace,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list tables in namespace {} for catalog {} on source.",
           namespace,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -1153,12 +1199,12 @@ public class PolarisSynchronizer {
           namespace,
           catalogName);
     } catch (Exception e) {
-      if (haltOnFailure) throw e;
       clientLogger.error(
           "Failed to list tables in namespace {} for catalog {} on target.",
           namespace,
           catalogName,
           e);
+      if (haltOnFailure) throw e;
       return;
     }
 
@@ -1201,7 +1247,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to register table {} in namespace {} in catalog {}. - {}/{}",
             tableId,
@@ -1210,6 +1255,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -1252,7 +1298,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
             "Failed to drop and re-register table {} in namespace {} in catalog {}. - {}/{}",
             tableId,
@@ -1261,6 +1306,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
 
@@ -1275,7 +1321,6 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete);
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.info(
             "Failed to drop table {} in namespace {} in catalog {}. - {}/{}",
             table,
@@ -1284,6 +1329,7 @@ public class PolarisSynchronizer {
             ++syncsCompleted,
             totalSyncsToComplete,
             e);
+        if (haltOnFailure) throw e;
       }
     }
   }

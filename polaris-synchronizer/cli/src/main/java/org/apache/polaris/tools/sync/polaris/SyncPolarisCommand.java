@@ -22,6 +22,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
 import org.apache.polaris.tools.sync.polaris.planning.AccessControlAwarePlanner;
 import org.apache.polaris.tools.sync.polaris.planning.ModificationAwarePlanner;
@@ -120,6 +123,13 @@ public class SyncPolarisCommand implements Callable<Integer> {
   )
   private boolean haltOnFailure;
 
+  @CommandLine.Option(
+          names = {"--concurrency"},
+          defaultValue = "1",
+          description = "Number of threads to use."
+  )
+  private int numberOfThreads;
+
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner sourceParityPlanner = new SourceParitySynchronizationPlanner();
@@ -137,10 +147,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
     ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
 
+    ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+
     Runtime.getRuntime()
         .addShutdownHook(
             new Thread(
                 () -> {
+                  executorService.shutdownNow();
+
                   if (etagService instanceof Closeable closableETagService) {
                     try {
                       closableETagService.close();
@@ -157,7 +171,8 @@ public class SyncPolarisCommand implements Callable<Integer> {
             accessControlAwarePlanner,
             source,
             target,
-            etagService);
+            etagService,
+            executorService);
     synchronizer.syncPrincipalRoles();
     if (shouldSyncPrincipals) {
       consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +
