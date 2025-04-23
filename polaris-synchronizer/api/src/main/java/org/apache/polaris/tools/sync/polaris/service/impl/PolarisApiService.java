@@ -277,8 +277,18 @@ public class PolarisApiService implements PolarisService {
 
     @Override
     public void close() throws IOException {
-        if (this.authenticationSession != null){
-            this.authenticationSession.close();
+        AuthenticationSessionWrapper session = this.authenticationSession;
+
+        try (session) {}
+        finally {
+            this.properties = null;
+            this.baseUrl = null;
+            this.api = null;
+            this.accessControlService = null;
+            this.omnipotentPrincipal = null;
+            this.omnipotentPrincipalRole = null;
+            this.icebergWriteAccess = false;
+            this.authenticationSession = null;
         }
     }
 

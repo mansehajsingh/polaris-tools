@@ -33,7 +33,7 @@ import java.util.Map;
 /**
  * Generic wrapper for a Polaris entity store.
  */
-public interface PolarisService extends Closeable {
+public interface PolarisService extends AutoCloseable {
 
     /**
      * Called to perform initializing tasks for a Polaris entity store.

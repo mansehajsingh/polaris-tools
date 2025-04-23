@@ -26,7 +26,7 @@ import java.util.Map;
  * Generic interface to provide and store ETags for tables within catalogs. This allows the storage
  * of the ETag to be completely independent from the tool.
  */
-public interface ETagManager {
+public interface ETagManager extends AutoCloseable {
 
   /**
    * Used to initialize the instance for use. Should be called prior to

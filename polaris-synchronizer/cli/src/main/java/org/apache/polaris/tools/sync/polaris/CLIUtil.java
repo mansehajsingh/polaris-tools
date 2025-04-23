@@ -1,8 +1,5 @@
 package org.apache.polaris.tools.sync.polaris;
 
-import java.io.Closeable;
-import java.io.IOException;
-
 /**
  * CLI specific utilities and constants.
  */
@@ -14,8 +11,7 @@ public class CLIUtil {
             "\n\t- token: the bearer token to authenticate against the Polaris instance with." +
             "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
             "\n\t- credential: the client credentials to use to authenticate against the Polaris instance (eg. <client_id>:client_secret>)" +
-            "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
-            "\n\t- <token_type>=<token>: for token exchange authentication, the token type (eg. urn:ietf:params:oauth:token-type:access_token) with a provided token";
+            "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)";
 
     public static final String OMNIPOTENT_PRINCIPAL_PROPERTIES_DESCRIPTION =
             "\nOmnipotent Principal Properties:" +
@@ -26,23 +22,5 @@ public class CLIUtil {
                 + "the OAuth2 server to use to authenticate the omnipotent-principal for Iceberg catalog access";
 
     private CLIUtil() {}
-
-    /**
-     * While all resources should ideally be explicitly closed prior to program termination,
-     * passing a closeable entity to this method adds a runtime shutdown hook to close the
-     * provided resource on program termination, even if the entity was not explicitly
-     * properly closed prior. This is useful in the event that some hard failure occurs before
-     * the program reaches the call to {@link Closeable#close()}.
-     * @param closeable the resource to close
-     */
-    public static void closeResourceOnTermination(final Closeable closeable) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                closeable.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }));
-    }
 
 }

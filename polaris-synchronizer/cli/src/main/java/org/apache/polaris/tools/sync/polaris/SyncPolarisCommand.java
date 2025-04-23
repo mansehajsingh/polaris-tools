@@ -18,8 +18,6 @@
  */
 package org.apache.polaris.tools.sync.polaris;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
@@ -102,38 +100,29 @@ public class SyncPolarisCommand implements Callable<Integer> {
     sourceProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false));
     targetProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(true));
 
-    PolarisService source =
-            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, sourceProperties);
-    PolarisService target =
-            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, targetProperties);
-
-    ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
-
-    if (etagService instanceof Closeable closeableETagService) {
-      CLIUtil.closeResourceOnTermination(closeableETagService);
+    try (
+            PolarisService source = PolarisServiceFactory.createPolarisService(
+                    PolarisServiceFactory.ServiceType.API, sourceProperties);
+            PolarisService target = PolarisServiceFactory.createPolarisService(
+                    PolarisServiceFactory.ServiceType.API, targetProperties);
+            ETagManager etagManager = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties)
+    ) {
+      PolarisSynchronizer synchronizer =
+              new PolarisSynchronizer(
+                      consoleLog,
+                      haltOnFailure,
+                      accessControlAwarePlanner,
+                      source,
+                      target,
+                      etagManager);
+      synchronizer.syncPrincipalRoles();
+      if (shouldSyncPrincipals) {
+        consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +
+                "Principal migration will log the new target Principal credentials to stdout.");
+        synchronizer.syncPrincipals();
+      }
+      synchronizer.syncCatalogs();
     }
-
-    CLIUtil.closeResourceOnTermination(source);
-    CLIUtil.closeResourceOnTermination(target);
-
-    PolarisSynchronizer synchronizer =
-        new PolarisSynchronizer(
-            consoleLog,
-            haltOnFailure,
-            accessControlAwarePlanner,
-            source,
-            target,
-            etagService);
-    synchronizer.syncPrincipalRoles();
-    if (shouldSyncPrincipals) {
-      consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +
-              "Principal migration will log the new target Principal credentials to stdout.");
-      synchronizer.syncPrincipals();
-    }
-    synchronizer.syncCatalogs();
-
-    source.close();
-    target.close();
 
     return 0;
   }

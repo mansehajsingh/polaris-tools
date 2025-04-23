@@ -161,12 +161,16 @@ public class PolarisCatalog extends RESTCatalog
 
   @Override
   public void close() throws IOException {
-    if (httpClient != null) {
-      httpClient.close();
-    }
+    final AuthenticationSessionWrapper session = this.authenticationSession;
+    final HttpClient httpClient = this.httpClient;
 
-    if (this.authenticationSession != null) {
-      this.authenticationSession.close();
+    try (session; httpClient) {
+      super.close();
+    } finally {
+      this.authenticationSession = null;
+      this.httpClient = null;
+      this.objectMapper = null;
+      this.resourcePaths = null;
     }
 
     super.close();

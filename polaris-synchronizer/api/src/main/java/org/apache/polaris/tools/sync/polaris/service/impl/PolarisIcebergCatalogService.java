@@ -163,9 +163,7 @@ public class PolarisIcebergCatalogService implements IcebergCatalogService {
 
     @Override
     public void close() throws IOException {
-        if (this.catalog != null) {
-            this.catalog.close();
-        }
+        this.catalog.close();
     }
 
 }

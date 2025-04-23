@@ -35,4 +35,8 @@ public class NoOpETagManager implements ETagManager {
 
   @Override
   public void storeETag(String catalogName, TableIdentifier tableIdentifier, String etag) {}
+
+  @Override
+  public void close() {}
+
 }

@@ -11,6 +11,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * Wraps {@link OAuth2Util.AuthSession} to provide supported authentication flows.
@@ -21,11 +22,14 @@ public class AuthenticationSessionWrapper implements Closeable {
 
     private final OAuth2Util.AuthSession authSession;
 
+    private final ScheduledExecutorService executor;
+
     public AuthenticationSessionWrapper(Map<String, String> properties) {
         this.restClient = HTTPClient.builder(Map.of())
                 .uri(properties.get(OAuth2Properties.OAUTH2_SERVER_URI))
                 .build();
         this.authSession = this.newAuthSession(this.restClient, properties);
+        this.executor = ThreadPools.newScheduledPool(UUID.randomUUID() + "-token-refresh", 1);
     }
 
     /**
@@ -49,7 +53,7 @@ public class AuthenticationSessionWrapper implements Closeable {
                     restClient,
                     // threads created here will be daemon threads, so termination of main program
                     // will terminate the token refresh thread automatically
-                    ThreadPools.newScheduledPool(UUID.randomUUID() + "-token-refresh", 1),
+                    this.executor,
                     properties.get(OAuth2Properties.CREDENTIAL),
                     parent
             );
@@ -61,7 +65,7 @@ public class AuthenticationSessionWrapper implements Closeable {
                     restClient,
                     // threads created here will be daemon threads, so termination of main program
                     // will terminate the token refresh thread automatically
-                    ThreadPools.newScheduledPool(UUID.randomUUID() + "-access-token-refresh", 1),
+                    this.executor,
                     properties.get(OAuth2Properties.TOKEN),
                     null, /* defaultExpiresAtMillis */
                     parent
@@ -80,9 +84,7 @@ public class AuthenticationSessionWrapper implements Closeable {
 
     @Override
     public void close() throws IOException {
-        if (this.restClient != null) {
-            this.restClient.close();
-        }
+        try (restClient; executor) {}
     }
 
 }
