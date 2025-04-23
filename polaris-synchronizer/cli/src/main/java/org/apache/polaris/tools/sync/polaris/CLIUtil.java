@@ -1,5 +1,8 @@
 package org.apache.polaris.tools.sync.polaris;
 
+import java.io.Closeable;
+import java.io.IOException;
+
 /**
  * CLI specific utilities and constants.
  */
@@ -23,5 +26,23 @@ public class CLIUtil {
                 + "the OAuth2 server to use to authenticate the omnipotent-principal for Iceberg catalog access";
 
     private CLIUtil() {}
+
+    /**
+     * While all resources should ideally be explicitly closed prior to program termination,
+     * passing a closeable entity to this method adds a runtime shutdown hook to close the
+     * provided resource on program termination, even if the entity was not explicitly
+     * properly closed prior. This is useful in the event that some hard failure occurs before
+     * the program reaches the call to {@link Closeable#close()}.
+     * @param closeable the resource to close
+     */
+    public static void closeResourceOnTermination(final Closeable closeable) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                closeable.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }));
+    }
 
 }

@@ -28,6 +28,7 @@ import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 import org.apache.polaris.tools.sync.polaris.catalog.PolarisCatalog;
 import org.apache.polaris.tools.sync.polaris.service.IcebergCatalogService;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -158,6 +159,13 @@ public class PolarisIcebergCatalogService implements IcebergCatalogService {
     @Override
     public void dropTableWithoutPurge(TableIdentifier tableIdentifier) {
         this.catalog.dropTable(tableIdentifier, false /* purge */);
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (this.catalog != null) {
+            this.catalog.close();
+        }
     }
 
 }

@@ -26,13 +26,14 @@ import org.apache.polaris.core.admin.model.Principal;
 import org.apache.polaris.core.admin.model.PrincipalRole;
 import org.apache.polaris.core.admin.model.PrincipalWithCredentials;
 
+import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Generic wrapper for a Polaris entity store.
  */
-public interface PolarisService {
+public interface PolarisService extends Closeable {
 
     /**
      * Called to perform initializing tasks for a Polaris entity store.

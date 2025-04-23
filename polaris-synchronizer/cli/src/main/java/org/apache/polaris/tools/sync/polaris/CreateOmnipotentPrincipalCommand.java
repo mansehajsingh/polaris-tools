@@ -91,6 +91,8 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
     PolarisService polaris = PolarisServiceFactory.createPolarisService(
             PolarisServiceFactory.ServiceType.API, polarisApiConnectionProperties);
 
+    CLIUtil.closeResourceOnTermination(polaris);
+
     AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
 
     PrincipalWithCredentials principalWithCredentials;
@@ -181,6 +183,8 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
         principalWithCredentials.getPrincipal().getName(),
         principalWithCredentials.getCredentials().getClientId(),
         principalWithCredentials.getCredentials().getClientSecret());
+
+    polaris.close();
 
     return 0;
   }

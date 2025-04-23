@@ -23,6 +23,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 
+import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
 
@@ -30,7 +31,7 @@ import java.util.Map;
  * Wrapper around {@link org.apache.iceberg.catalog.Catalog} that exposes functionality
  * that uses multiple Iceberg operations. For example, cascading drops of namespaces.
  */
-public interface IcebergCatalogService {
+public interface IcebergCatalogService extends Closeable {
 
     // NAMESPACES
     List<Namespace> listNamespaces(Namespace parentNamespace);

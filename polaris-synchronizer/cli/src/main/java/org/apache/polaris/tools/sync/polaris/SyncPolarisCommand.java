@@ -109,18 +109,12 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
     ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
 
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  if (etagService instanceof Closeable closableETagService) {
-                    try {
-                      closableETagService.close();
-                    } catch (IOException e) {
-                      throw new RuntimeException(e);
-                    }
-                  }
-                }));
+    if (etagService instanceof Closeable closeableETagService) {
+      CLIUtil.closeResourceOnTermination(closeableETagService);
+    }
+
+    CLIUtil.closeResourceOnTermination(source);
+    CLIUtil.closeResourceOnTermination(target);
 
     PolarisSynchronizer synchronizer =
         new PolarisSynchronizer(
@@ -137,6 +131,9 @@ public class SyncPolarisCommand implements Callable<Integer> {
       synchronizer.syncPrincipals();
     }
     synchronizer.syncCatalogs();
+
+    source.close();
+    target.close();
 
     return 0;
   }

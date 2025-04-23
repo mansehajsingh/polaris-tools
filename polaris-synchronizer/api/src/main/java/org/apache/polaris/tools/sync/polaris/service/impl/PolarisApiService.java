@@ -42,6 +42,7 @@ import org.apache.polaris.tools.sync.polaris.auth.AuthenticationSessionWrapper;
 import org.apache.polaris.tools.sync.polaris.service.IcebergCatalogService;
 import org.apache.polaris.tools.sync.polaris.service.PolarisService;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -67,6 +68,8 @@ public class PolarisApiService implements PolarisService {
 
     private boolean icebergWriteAccess = false;
 
+    private AuthenticationSessionWrapper authenticationSession = null;
+
     public PolarisApiService() {}
 
     @Override
@@ -78,10 +81,10 @@ public class PolarisApiService implements PolarisService {
         ApiClient client = new ApiClient();
         client.updateBaseUri(baseUrl + "/api/management/v1");
 
-        AuthenticationSessionWrapper authenticationSessionWrapper = new AuthenticationSessionWrapper(properties);
+        this.authenticationSession = new AuthenticationSessionWrapper(properties);
 
         client.setRequestInterceptor(requestBuilder
-                -> authenticationSessionWrapper.getSessionHeaders().forEach(requestBuilder::header));
+                -> authenticationSession.getSessionHeaders().forEach(requestBuilder::header));
 
         this.baseUrl = baseUrl;
         this.api = new PolarisManagementDefaultApi(client);
@@ -270,6 +273,13 @@ public class PolarisApiService implements PolarisService {
         setupOmnipotentCatalogRoleIfNotExists(catalogName);
         return new PolarisIcebergCatalogService(
                 baseUrl, catalogName, omnipotentPrincipal, properties);
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (this.authenticationSession != null){
+            this.authenticationSession.close();
+        }
     }
 
 }

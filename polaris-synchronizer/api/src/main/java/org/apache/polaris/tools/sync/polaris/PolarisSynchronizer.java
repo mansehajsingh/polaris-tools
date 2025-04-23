@@ -665,6 +665,20 @@ public class PolarisSynchronizer {
       syncNamespaces(
           catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
 
+      try {
+        sourceIcebergCatalogService.close();
+      } catch (Exception e) {
+        clientLogger.info("Failed to close Iceberg REST catalog for Polaris catalog {} on source.", catalog.getName());
+        if (haltOnFailure) throw new RuntimeException(e);
+      }
+
+      try {
+        targetIcebergCatalogService.close();
+      } catch (Exception e) {
+        clientLogger.info("Failed to close Iceberg REST catalog for Polaris catalog {} on target.", catalog.getName());
+        if (haltOnFailure) throw new RuntimeException(e);
+      }
+
       // NOTE: Grants are synced on a per catalog role basis, so we need to ensure that catalog roles
       // are only synced AFTER Iceberg catalog entities, because they may depend on the Iceberg catalog
       // entities already existing

@@ -7,18 +7,25 @@ import org.apache.iceberg.rest.auth.OAuth2Properties;
 import org.apache.iceberg.rest.auth.OAuth2Util;
 import org.apache.iceberg.util.ThreadPools;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * Wraps {@link OAuth2Util.AuthSession} to provide supported authentication flows.
  */
-public class AuthenticationSessionWrapper {
+public class AuthenticationSessionWrapper implements Closeable {
+
+    private final RESTClient restClient;
 
     private final OAuth2Util.AuthSession authSession;
 
     public AuthenticationSessionWrapper(Map<String, String> properties) {
-        this.authSession = this.newAuthSession(properties);
+        this.restClient = HTTPClient.builder(Map.of())
+                .uri(properties.get(OAuth2Properties.OAUTH2_SERVER_URI))
+                .build();
+        this.authSession = this.newAuthSession(this.restClient, properties);
     }
 
     /**
@@ -26,12 +33,7 @@ public class AuthenticationSessionWrapper {
      * @param properties properties to initialize the session with
      * @return an authentication session, with token refresh if applicable
      */
-    private OAuth2Util.AuthSession newAuthSession(Map<String, String> properties) {
-
-        RESTClient restClient = HTTPClient.builder(Map.of())
-                .uri(properties.get(OAuth2Properties.OAUTH2_SERVER_URI))
-                .build();
-
+    private OAuth2Util.AuthSession newAuthSession(RESTClient restClient, Map<String, String> properties) {
         OAuth2Util.AuthSession parent = new OAuth2Util.AuthSession(
                 Map.of(),
                 AuthConfig.builder()
@@ -77,6 +79,13 @@ public class AuthenticationSessionWrapper {
      */
     public Map<String, String> getSessionHeaders() {
         return this.authSession.headers();
+    }
+
+    @Override
+    public void close() throws IOException {
+        if (this.restClient != null) {
+            this.restClient.close();
+        }
     }
 
 }

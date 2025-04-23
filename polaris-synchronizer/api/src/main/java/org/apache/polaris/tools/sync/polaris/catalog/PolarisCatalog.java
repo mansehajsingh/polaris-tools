@@ -20,6 +20,7 @@ package org.apache.polaris.tools.sync.polaris.catalog;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.Closeable;
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -156,5 +157,18 @@ public class PolarisCatalog extends RESTCatalog
     }
 
     return new BaseTable(ops, CatalogUtil.fullTableName(catalogName, ident));
+  }
+
+  @Override
+  public void close() throws IOException {
+    if (httpClient != null) {
+      httpClient.close();
+    }
+
+    if (this.authenticationSession != null) {
+      this.authenticationSession.close();
+    }
+
+    super.close();
   }
 }
