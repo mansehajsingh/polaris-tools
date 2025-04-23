@@ -37,11 +37,8 @@ public class AuthenticationSessionWrapper implements Closeable {
         OAuth2Util.AuthSession parent = new OAuth2Util.AuthSession(
                 Map.of(),
                 AuthConfig.builder()
-                        .credential(properties.get(OAuth2Properties.CREDENTIAL))
                         .scope(properties.get(OAuth2Properties.SCOPE))
                         .oauth2ServerUri(properties.get(OAuth2Properties.OAUTH2_SERVER_URI))
-                        .token(properties.get(OAuth2Properties.TOKEN))
-                        .tokenType(OAuth2Properties.ACCESS_TOKEN_TYPE)
                         .optionalOAuthParams(OAuth2Util.buildOptionalParam(properties))
                         .build()
         );
