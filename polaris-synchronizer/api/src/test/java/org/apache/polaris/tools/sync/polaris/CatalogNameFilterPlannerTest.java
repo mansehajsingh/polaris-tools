@@ -72,5 +72,4 @@ public class CatalogNameFilterPlannerTest {
         Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(CATALOG_1));
         Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(CATALOG_2));
     }
-
 }

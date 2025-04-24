@@ -18,6 +18,7 @@
  */
 package org.apache.polaris.tools.sync.polaris.planning;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.apache.iceberg.catalog.Namespace;
@@ -34,6 +35,64 @@ import org.apache.polaris.tools.sync.polaris.planning.plan.SynchronizationPlan;
  * principal roles exist on the source and target.
  */
 public interface SynchronizationPlanner {
+
+  class SynchronizationPlannerBuilder {
+
+    @FunctionalInterface
+    public interface PlannerWrapper {
+
+      /**
+       * Wrap a provided {@link SynchronizationPlanner} by another {@link SynchronizationPlanner}.
+       * @param planner the planner to wrap
+       * @return a wrapped planner
+       */
+      SynchronizationPlanner wrap(SynchronizationPlanner planner);
+    }
+
+    private final SynchronizationPlanner innermost;
+
+    private final List<PlannerWrapper> plannerWrappers = new ArrayList<>();
+
+    private SynchronizationPlannerBuilder(SynchronizationPlanner innermost) {
+      this.innermost = innermost;
+    }
+
+    /**
+     * Wrap the current chain of planners.
+     * @param outer the planner to wrap by
+     */
+    public SynchronizationPlannerBuilder wrapBy(PlannerWrapper outer) {
+      plannerWrappers.add(outer);
+      return this;
+    }
+
+    /**
+     * Wrap the current chain of planners if the condition is true.
+     * @param condition if true, will wrap the current chain of planners by the provided outer planner
+     * @param outer the planner to wrap by
+     */
+    public SynchronizationPlannerBuilder conditionallyWrapBy(boolean condition, PlannerWrapper outer) {
+      if (condition) {
+        plannerWrappers.add(outer);
+      }
+      return this;
+    }
+
+    /**
+     * Build the chained set of planners.
+     */
+    public SynchronizationPlanner build() {
+      SynchronizationPlanner current = innermost;
+      for (PlannerWrapper plannerWrapper : plannerWrappers) {
+        plannerWrapper.wrap(current);
+      }
+      return current;
+    }
+  }
+
+  static SynchronizationPlannerBuilder builder(SynchronizationPlanner innermost) {
+    return new SynchronizationPlannerBuilder(innermost);
+  }
 
   SynchronizationPlan<Principal> planPrincipalSync(
           List<Principal> principalsOnSource, List<Principal> principalsOnTarget);

@@ -100,14 +100,11 @@ public class SyncPolarisCommand implements Callable<Integer> {
 
   @Override
   public Integer call() throws Exception {
-    SynchronizationPlanner planner = new SourceParitySynchronizationPlanner();
-    planner = new ModificationAwarePlanner(planner);
-
-    if (catalogNameRegex != null) {
-      planner = new CatalogNameFilterPlanner(catalogNameRegex, planner);
-    }
-
-    planner = new AccessControlAwarePlanner(planner);
+    SynchronizationPlanner planner = SynchronizationPlanner.builder(new SourceParitySynchronizationPlanner())
+            .wrapBy(ModificationAwarePlanner::new)
+            .conditionallyWrapBy(catalogNameRegex != null, p -> new CatalogNameFilterPlanner(catalogNameRegex, p))
+            .wrapBy(AccessControlAwarePlanner::new)
+            .build();
 
     // auto generate omnipotent principals with write access on the target, read only access on source
     sourceProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false));
