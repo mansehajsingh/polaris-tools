@@ -71,8 +71,8 @@ public class CatalogNameFilterPlanner extends DelegatedPlanner implements Synchr
             }
         }
 
-        SynchronizationPlan<Catalog> delegatedPlan = delegate.planCatalogSync(
-                filteredSourceCatalogs, filteredTargetCatalogs);
+        SynchronizationPlan<Catalog> delegatedPlan =
+                delegate.planCatalogSync(filteredSourceCatalogs, filteredTargetCatalogs);
 
         skippedSourceCatalogsByName.values().forEach(delegatedPlan::skipEntityAndSkipChildren);
         skippedTargetCatalogs.forEach(delegatedPlan::skipEntityAndSkipChildren);
