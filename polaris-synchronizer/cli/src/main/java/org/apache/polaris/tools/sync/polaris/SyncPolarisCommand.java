@@ -99,10 +99,10 @@ public class SyncPolarisCommand implements Callable<Integer> {
   private String catalogNameRegex;
 
   @CommandLine.Option(
-          names = {"--delta-only"},
+          names = {"--diff-only"},
           description = "Only synchronize the diff between the source and target Polaris."
   )
-  private boolean deltaOnly;
+  private boolean diffOnly;
 
   @CommandLine.Option(
           names = {"--strategy"},
@@ -121,7 +121,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
   @Override
   public Integer call() throws Exception {
     SynchronizationPlanner planner = SynchronizationPlanner.builder(new BaseStrategyPlanner(strategy))
-            .conditionallyWrapBy(deltaOnly, ModificationAwarePlanner::new)
+            .conditionallyWrapBy(diffOnly, ModificationAwarePlanner::new)
             .conditionallyWrapBy(catalogNameRegex != null, p -> new CatalogNameFilterPlanner(catalogNameRegex, p))
             .wrapBy(AccessControlAwarePlanner::new)
             .build();
@@ -145,7 +145,7 @@ public class SyncPolarisCommand implements Callable<Integer> {
                       source,
                       target,
                       etagManager,
-                      deltaOnly);
+                      diffOnly);
       synchronizer.syncPrincipalRoles();
       if (shouldSyncPrincipals) {
         consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +

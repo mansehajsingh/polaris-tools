@@ -61,7 +61,7 @@ public class PolarisSynchronizer {
 
   private final boolean haltOnFailure;
 
-  private final boolean deltaOnly;
+  private final boolean diffOnly;
 
   public PolarisSynchronizer(
       Logger clientLogger,
@@ -70,7 +70,7 @@ public class PolarisSynchronizer {
       PolarisService source,
       PolarisService target,
       ETagManager etagManager,
-      boolean deltaOnly) {
+      boolean diffOnly) {
     this.clientLogger =
         clientLogger == null ? LoggerFactory.getLogger(PolarisSynchronizer.class) : clientLogger;
     this.haltOnFailure = haltOnFailure;
@@ -78,7 +78,7 @@ public class PolarisSynchronizer {
     this.source = source;
     this.target = target;
     this.etagManager = etagManager;
-    this.deltaOnly = deltaOnly;
+    this.diffOnly = diffOnly;
   }
 
   /**
@@ -1040,8 +1040,8 @@ public class PolarisSynchronizer {
         Map<String, String> sourceNamespaceMetadata =
             sourceIcebergCatalogService.loadNamespaceMetadata(namespace);
 
-        if (this.deltaOnly) {
-          // if only configured to migrate the delta between the source and the target Polaris,
+        if (this.diffOnly) {
+          // if only configured to migrate the diff between the source and the target Polaris,
           // then we can load the target namespace metadata and perform a comparison to discontinue early
           // if we notice the metadata did not change
 
@@ -1217,7 +1217,7 @@ public class PolarisSynchronizer {
       try {
         Table table;
 
-        if (this.deltaOnly && sourceIcebergCatalogService instanceof PolarisIcebergCatalogService polarisCatalogService) {
+        if (this.diffOnly && sourceIcebergCatalogService instanceof PolarisIcebergCatalogService polarisCatalogService) {
           String etag = etagManager.getETag(catalogName, tableId);
           table = polarisCatalogService.loadTable(tableId, etag);
         } else {
