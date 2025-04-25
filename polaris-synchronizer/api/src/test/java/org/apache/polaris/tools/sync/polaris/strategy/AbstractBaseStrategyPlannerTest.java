@@ -103,7 +103,7 @@ public abstract class AbstractBaseStrategyPlannerTest {
             Assertions.assertTrue(plan.entitiesToRemove().contains(entityOnTarget));
         } else {
             // only REPLICATE should remove entities from the target
-            Assertions.assertTrue(plan.entitiesToSkip().contains(entityOnTarget));
+            Assertions.assertTrue(plan.entitiesToSkipAndSkipChildren().contains(entityOnTarget));
         }
     }
 
