@@ -630,53 +630,28 @@ public class PolarisSynchronizer {
     }
 
     for (Catalog catalog : catalogSyncPlan.entitiesToSyncChildren()) {
-      IcebergCatalogService sourceIcebergCatalogService;
 
-      try {
-        sourceIcebergCatalogService = source.initializeIcebergCatalogService(catalog.getName());
+      try (IcebergCatalogService sourceIcebergCatalogService = source.initializeIcebergCatalogService(catalog.getName())) {
         clientLogger.info(
-            "Initialized Iceberg REST catalog for Polaris catalog {} on source.",
-            catalog.getName());
+                "Initialized Iceberg REST catalog for Polaris catalog {} on source.",
+                catalog.getName());
+
+        try (IcebergCatalogService targetIcebergCatalogService = target.initializeIcebergCatalogService(catalog.getName())) {
+          clientLogger.info(
+                  "Initialized Iceberg REST catalog for Polaris catalog {} on target.",
+                  catalog.getName());
+
+          syncNamespaces(
+                  catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
+        }
+
       } catch (Exception e) {
-        if (haltOnFailure) throw e;
         clientLogger.error(
-            "Failed to initialize Iceberg REST catalog for Polaris catalog {} on source.",
-            catalog.getName(),
-            e);
-        continue;
-      }
-
-      IcebergCatalogService targetIcebergCatalogService;
-
-      try {
-        targetIcebergCatalogService = target.initializeIcebergCatalogService(catalog.getName());
-        clientLogger.info(
-            "Initialized Iceberg REST catalog for Polaris catalog {} on target.",
-            catalog.getName());
-      } catch (Exception e) {
-        if (haltOnFailure) throw e;
-        clientLogger.error(
-            "Failed to initialize Iceberg REST catalog for Polaris catalog {} on target.",
-            catalog.getName(),
-            e);
-        continue;
-      }
-
-      syncNamespaces(
-          catalog.getName(), Namespace.empty(), sourceIcebergCatalogService, targetIcebergCatalogService);
-
-      try {
-        sourceIcebergCatalogService.close();
-      } catch (Exception e) {
-        clientLogger.info("Failed to close Iceberg REST catalog for Polaris catalog {} on source.", catalog.getName());
+                "Failed to synchronize Iceberg REST catalog for Polaris catalog {}.",
+                catalog.getName(),
+                e);
         if (haltOnFailure) throw new RuntimeException(e);
-      }
-
-      try {
-        targetIcebergCatalogService.close();
-      } catch (Exception e) {
-        clientLogger.info("Failed to close Iceberg REST catalog for Polaris catalog {} on target.", catalog.getName());
-        if (haltOnFailure) throw new RuntimeException(e);
+        continue;
       }
 
       // NOTE: Grants are synced on a per catalog role basis, so we need to ensure that catalog roles
