@@ -84,7 +84,7 @@ public interface SynchronizationPlanner {
     public SynchronizationPlanner build() {
       SynchronizationPlanner current = innermost;
       for (PlannerWrapper plannerWrapper : plannerWrappers) {
-        plannerWrapper.wrap(current);
+        current = plannerWrapper.wrap(current);
       }
       return current;
     }
